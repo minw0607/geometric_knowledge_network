@@ -1,0 +1,6 @@
+Model Validation Standard
+
+Validation must assess data quality, performance, robustness, and monitoring readiness.
+Testing evidence should include threshold-based evaluation and documented failure cases.
+Validation approval requires documented evidence that monitoring controls are in place.
+When drift risk is elevated, the validation review must include enhanced monitoring checks.

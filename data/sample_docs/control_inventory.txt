@@ -1,0 +1,6 @@
+Control Inventory
+
+Control C-101 requires annual review of production AI systems.
+Control C-205 requires monitoring for drift, harmful outputs, and operational incidents.
+Control C-310 requires documented testing evidence before deployment approval.
+Control C-450 requires incident escalation when material issues are identified.

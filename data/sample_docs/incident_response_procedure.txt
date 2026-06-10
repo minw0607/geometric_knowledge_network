@@ -1,0 +1,5 @@
+Incident Response Procedure
+
+When monitoring identifies model drift, the incident owner must open a review ticket.
+Material incidents require escalation, evidence collection, and approval for remediation.
+Incident review should cite the affected control, related validation evidence, and system owner.

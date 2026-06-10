@@ -1,0 +1,7 @@
+AI Governance Policy
+
+All high-impact AI systems must complete validation before approval for production use.
+Validation evidence must include testing results, monitoring design, and documented limitations.
+Annual review is required for all production AI systems.
+Any material model change requires re-validation and updated approval evidence.
+Incident reporting is required when monitoring identifies drift or harmful behavior.
