@@ -8,7 +8,7 @@
 
 ---
 
-## Overview
+## 🌐 Overview
 
 This repository explores a practical question at the intersection of **RAG**, **knowledge graphs**, and **AI evaluation**:
 
@@ -36,7 +36,7 @@ This repository implements a **Geometric Knowledge Network (GKN)** as a lightwei
 
 ---
 
-## Table of contents
+## 📚 Table of contents
 
 - [Overview](#overview)
 - [Why this work matters](#why-this-work-matters)
@@ -117,7 +117,7 @@ For the MVP, “geometric” is implemented pragmatically through **embedding sp
 
 ---
 
-## Key differentiators
+## ✨ Key differentiators
 
 What makes this repository different from a typical lightweight RAG demo:
 
@@ -130,7 +130,7 @@ What makes this repository different from a typical lightweight RAG demo:
 
 ---
 
-## Design principles
+## 🧭 Design principles
 
 This repository follows a deliberately pragmatic architecture.
 
@@ -143,7 +143,7 @@ This repository follows a deliberately pragmatic architecture.
 
 ---
 
-## Current MVP capabilities
+## 🧩 Current MVP capabilities
 
 The repository currently includes:
 
@@ -164,7 +164,7 @@ The repository currently includes:
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```text
 Raw Documents
@@ -192,7 +192,7 @@ Evaluation + Reports + Figures + Saved Artifacts
 
 ---
 
-## Why the sample docs are synthetic
+## 🧪 Why the sample docs are synthetic
 
 For the first demo, the repository uses a small synthetic-but-realistic corpus rather than a public benchmark-only dataset.
 
@@ -211,7 +211,7 @@ That makes the repository better suited for demonstrating the value of GKN-enhan
 
 ---
 
-## Repository layout
+## 🗂️ Repository layout
 
 ```text
 geometric_knowledge_network/
@@ -241,7 +241,7 @@ geometric_knowledge_network/
 
 ---
 
-## Quick start
+## 🚀 Quick start
 
 ### 1. Create and activate a virtual environment
 
@@ -267,7 +267,7 @@ The notebook is intentionally code-light and delegates implementation to the Pyt
 
 ---
 
-## What the demo notebook is intended to show
+## 📓 What the demo notebook is intended to show
 
 The notebook walks through:
 
@@ -284,7 +284,7 @@ The notebook walks through:
 
 ---
 
-## Local outputs and artifacts
+## 💾 Local outputs and artifacts
 
 The repository is designed to save outputs locally so results are inspectable and reproducible.
 
@@ -305,7 +305,7 @@ These can contain:
 
 ---
 
-## Current limitations
+## ⚠️ Current limitations
 
 This is an MVP and not yet a production system.
 
@@ -322,7 +322,7 @@ Current limitations include:
 
 ---
 
-## Planned enhancement path
+## 🛣️ Planned enhancement path
 
 ### Near-term improvements
 
@@ -343,7 +343,7 @@ Current limitations include:
 
 ---
 
-## Conceptual grounding
+## 🧠 Conceptual grounding
 
 This repository is inspired by a practical interpretation of several overlapping ideas:
 
@@ -356,7 +356,7 @@ This repo takes those ideas and applies them in a pragmatic local MVP for docume
 
 ---
 
-## References and related resources
+## 📖 References and related resources
 
 ### Core conceptual and practical references
 
@@ -404,12 +404,12 @@ This repo takes those ideas and applies them in a pragmatic local MVP for docume
 
 ---
 
-## License
+## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-## Status
+## 📌 Status
 
 > **Current status:** early-stage local MVP focused on building a credible and inspectable comparison between baseline vector retrieval and GKN-enhanced retrieval.
