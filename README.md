@@ -4,6 +4,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+> **Core idea:** a vector store tells us what is semantically close; a geometric knowledge network helps tell us what is structurally connected, supporting, dependent, or implicated.
+
+---
+
 ## Overview
 
 This repository explores a practical question at the intersection of **RAG**, **knowledge graphs**, and **AI evaluation**:
@@ -12,7 +16,7 @@ This repository explores a practical question at the intersection of **RAG**, **
 
 The answer pursued here is not to replace embeddings, but to **complement** them.
 
-Traditional vector-store retrieval is very effective at semantic similarity. However, many real document-grounded workflows require more than semantic closeness. They also require:
+Traditional vector-store retrieval is very effective at semantic similarity. However, many document-grounded workflows require more than semantic closeness. They also require:
 
 - explicit support paths from source text to answer
 - mapping between requirements, controls, evidence, and incidents
@@ -21,6 +25,38 @@ Traditional vector-store retrieval is very effective at semantic similarity. How
 - a structured layer for evaluation and governance
 
 This repository implements a **Geometric Knowledge Network (GKN)** as a lightweight enhancement layer over baseline RAG retrieval.
+
+### At a glance
+
+- **Problem:** vector-only RAG is strong on similarity but weaker on structure and traceability.
+- **Approach:** augment a vector store with a document-grounded knowledge network.
+- **Use case focus:** governance, validation, evidence mapping, and multi-hop retrieval.
+- **Style:** modular, local-first, inspectable, notebook-light.
+- **Goal:** compare baseline retrieval with GKN-enhanced retrieval in a reproducible way.
+
+---
+
+## Table of contents
+
+- [Overview](#overview)
+- [Why this work matters](#why-this-work-matters)
+- [What is a Geometric Knowledge Network in this repo?](#what-is-a-geometric-knowledge-network-in-this-repo)
+- [How GKN differs from a traditional vector store in RAG](#how-gkn-differs-from-a-traditional-vector-store-in-rag)
+- [Key differentiators](#key-differentiators)
+- [Design principles](#design-principles)
+- [Current MVP capabilities](#current-mvp-capabilities)
+- [Architecture](#architecture)
+- [Why the sample docs are synthetic](#why-the-sample-docs-are-synthetic)
+- [Repository layout](#repository-layout)
+- [Quick start](#quick-start)
+- [What the demo notebook is intended to show](#what-the-demo-notebook-is-intended-to-show)
+- [Local outputs and artifacts](#local-outputs-and-artifacts)
+- [Current limitations](#current-limitations)
+- [Planned enhancement path](#planned-enhancement-path)
+- [Conceptual grounding](#conceptual-grounding)
+- [References and related resources](#references-and-related-resources)
+- [License](#license)
+- [Status](#status)
 
 ---
 
@@ -77,9 +113,20 @@ For the MVP, “geometric” is implemented pragmatically through **embedding sp
 | Governance usefulness | Moderate | Higher for support mapping, evaluation, and review |
 | Failure mode | Misses structurally relevant but semantically distant chunks | Can recover linked chunks through network expansion |
 
-The key design idea is:
+> **Design distinction:** a vector store optimizes neighborhood in embedding space; GKN adds explicit relational structure that can surface relevant chunks even when they are not the nearest semantic match.
 
-> **A vector store tells us what is close; a knowledge network helps tell us what is connected, dependent, supporting, or implicated.**
+---
+
+## Key differentiators
+
+What makes this repository different from a typical lightweight RAG demo:
+
+- **Graph-enhanced retrieval rather than vector-only retrieval**
+- **Document-grounded typed entities** such as requirements, controls, evidence, and incidents
+- **Hybrid candidate expansion** through graph neighbors
+- **Evaluation-first design** with benchmark queries and comparison utilities
+- **Inspectable local artifacts** for results, reports, graph summaries, and figures
+- **Modular package architecture** with notebooks used mainly for orchestration
 
 ---
 
@@ -271,13 +318,13 @@ Current limitations include:
 - small synthetic evaluation set
 - no public benchmark adapter yet
 
-These limitations are intentional for the current phase: the focus is to validate whether a lightweight knowledge network can produce measurable value over vector-only retrieval.
+> These limitations are intentional for the current phase: the focus is to validate whether a lightweight knowledge network can produce measurable value over vector-only retrieval.
 
 ---
 
 ## Planned enhancement path
 
-Near-term improvements:
+### Near-term improvements
 
 - stronger chunking strategy
 - richer typed schema and edge semantics
@@ -285,7 +332,7 @@ Near-term improvements:
 - cleaner evaluation reports and artifact export
 - robust notebook rendering and GitHub presentation
 
-Longer-term options:
+### Longer-term options
 
 - local embedding model upgrades
 - LLM-assisted extraction with provenance and confidence
@@ -365,4 +412,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Status
 
-Early-stage local MVP under active development, focused on building a credible and inspectable comparison between baseline vector retrieval and GKN-enhanced retrieval.
+> **Current status:** early-stage local MVP focused on building a credible and inspectable comparison between baseline vector retrieval and GKN-enhanced retrieval.
