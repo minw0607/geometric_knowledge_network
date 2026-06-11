@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-
 from itertools import combinations
 
 import networkx as nx
 
-from .extraction import ConceptExtractor
+from .extraction import ConceptExtractor, ExtractedEntity
 from .ingest import Chunk, Document
 from .schema import EdgeType, NodeType
 
@@ -38,30 +37,39 @@ class KnowledgeNetworkBuilder:
                 edge_type=EdgeType.CONTAINS.value,
             )
 
-            concepts = self.extractor.extract_concepts(chunk)
-            for concept in concepts:
-                concept_id = f"concept::{concept}"
-                if not graph.has_node(concept_id):
+            entities = self.extractor.extract_entities(chunk)
+            for entity in entities:
+                if not graph.has_node(entity.entity_id):
                     graph.add_node(
-                        concept_id,
-                        node_type=NodeType.CONCEPT.value,
-                        label=concept,
+                        entity.entity_id,
+                        node_type=entity.node_type,
+                        label=entity.label,
+                        confidence=entity.confidence,
                     )
                 graph.add_edge(
                     chunk.chunk_id,
-                    concept_id,
+                    entity.entity_id,
                     edge_type=EdgeType.MENTIONS.value,
                 )
 
-            for left, right in combinations(concepts, 2):
-                left_id = f"concept::{left}"
-                right_id = f"concept::{right}"
-                if graph.has_edge(left_id, right_id):
+            for left, right in combinations(entities, 2):
+                if graph.has_edge(left.entity_id, right.entity_id):
                     continue
                 graph.add_edge(
-                    left_id,
-                    right_id,
-                    edge_type=EdgeType.RELATED_TO.value,
+                    left.entity_id,
+                    right.entity_id,
+                    edge_type=self._infer_edge_type(left, right),
                 )
 
         return graph
+
+    def _infer_edge_type(self, left: ExtractedEntity, right: ExtractedEntity) -> str:
+        pair = {left.node_type, right.node_type}
+
+        if NodeType.REQUIREMENT.value in pair and NodeType.CONTROL.value in pair:
+            return EdgeType.REQUIRES.value
+        if NodeType.EVIDENCE.value in pair and NodeType.REQUIREMENT.value in pair:
+            return EdgeType.SUPPORTS.value
+        if NodeType.INCIDENT.value in pair and NodeType.CONTROL.value in pair:
+            return EdgeType.TRIGGERS.value
+        return EdgeType.RELATED_TO.value

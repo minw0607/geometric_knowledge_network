@@ -1,0 +1,38 @@
+[
+  {
+    "query": "What evidence is required for validation approval?",
+    "relevant_chunk_ids": [
+      "model_validation_standard_chunk_0",
+      "ai_governance_policy_chunk_0"
+    ],
+    "category": "evidence_traceability",
+    "description": "Validation approval should be supported by evidence-related chunks."
+  },
+  {
+    "query": "Which control requires annual review of production AI systems?",
+    "relevant_chunk_ids": [
+      "control_inventory_chunk_0",
+      "ai_governance_policy_chunk_0"
+    ],
+    "category": "requirement_control_mapping",
+    "description": "Annual review appears in both policy and control inventory documents."
+  },
+  {
+    "query": "What happens when monitoring identifies drift?",
+    "relevant_chunk_ids": [
+      "incident_response_procedure_chunk_0",
+      "ai_governance_policy_chunk_0",
+      "control_inventory_chunk_0"
+    ],
+    "category": "multi_hop_incident",
+    "description": "This should connect monitoring, drift, incident reporting, and escalation."
+  },
+  {
+    "query": "Which control supports monitoring for harmful outputs and incidents?",
+    "relevant_chunk_ids": [
+      "control_inventory_chunk_0"
+    ],
+    "category": "control_lookup",
+    "description": "Direct control lookup for monitoring and incidents."
+  }
+]
