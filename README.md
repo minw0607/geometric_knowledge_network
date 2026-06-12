@@ -38,26 +38,26 @@ This repository implements a **Geometric Knowledge Network (GKN)** as a lightwei
 
 ## 📚 Table of contents
 
-- [Overview](#overview)
+- [Overview](#-overview)
 - [Why this work matters](#why-this-work-matters)
 - [What is a Geometric Knowledge Network in this repo?](#what-is-a-geometric-knowledge-network-in-this-repo)
 - [How GKN differs from a traditional vector store in RAG](#how-gkn-differs-from-a-traditional-vector-store-in-rag)
-- [Key differentiators](#key-differentiators)
-- [Design principles](#design-principles)
-- [Current MVP capabilities](#current-mvp-capabilities)
-- [Architecture](#architecture)
-- [Why the sample docs are synthetic](#why-the-sample-docs-are-synthetic)
-- [Repository layout](#repository-layout)
-- [Quick start](#quick-start)
-- [What the demo notebook is intended to show](#what-the-demo-notebook-is-intended-to-show)
-- [Local outputs and artifacts](#local-outputs-and-artifacts)
-- [Current limitations](#current-limitations)
-- [Planned enhancement path](#planned-enhancement-path)
-- [Conceptual grounding](#conceptual-grounding)
-- [Mathematical formulation](#mathematical-formulation)
-- [References and related resources](#references-and-related-resources)
-- [License](#license)
-- [Status](#status)
+- [Key differentiators](#-key-differentiators)
+- [Design principles](#-design-principles)
+- [Current MVP capabilities](#-current-mvp-capabilities)
+- [Architecture](#-architecture)
+- [Why the sample docs are synthetic](#-why-the-sample-docs-are-synthetic)
+- [Repository layout](#-repository-layout)
+- [Quick start](#-quick-start)
+- [What the demo notebook is intended to show](#-what-the-demo-notebook-is-intended-to-show)
+- [Local outputs and artifacts](#-local-outputs-and-artifacts)
+- [Current limitations](#-current-limitations)
+- [Planned enhancement path](#-planned-enhancement-path)
+- [Conceptual grounding](#-conceptual-grounding)
+- [Mathematical formulation](#-mathematical-formulation)
+- [References and related resources](#-references-and-related-resources)
+- [License](#-license)
+- [Status](#-status)
 
 ---
 
@@ -361,23 +361,23 @@ This repo takes those ideas and applies them in a pragmatic local MVP for docume
 
 A concise mathematical view of the current GKN is:
 
-- let \(\mathcal{D}\) be the document set and \(\mathcal{C}\) be the chunk set
-- let \(E(c)\) denote the typed entities extracted from chunk \(c\)
-- construct a graph \(G=(V,\mathcal{E})\) over documents, chunks, and entities
-- compute baseline retrieval using semantic similarity \(s_{\text{vec}}(q,c)\)
+- let `D` be the document set and `C` be the chunk set
+- let `E(c)` denote the typed entities extracted from chunk `c`
+- construct a graph `G = (V, E)` over documents, chunks, and entities
+- compute baseline retrieval using semantic similarity `s_vec(q, c)`
 - compute structural relevance using graph neighborhoods and typed relations
 - combine them into a hybrid retrieval score
 
 At a high level:
 
-\[
-s_{\text{hyb}}(q,c) = s_{\text{vec}}(q,c) + b(c)
-\]
+```text
+s_hyb(q, c) = s_vec(q, c) + b(c)
+```
 
 where:
 
-- \(s_{\text{vec}}(q,c)\) is semantic similarity between query and chunk
-- \(b(c)\) is a graph-derived bonus based on typed structural neighborhood and graph expansion
+- `s_vec(q, c)` is semantic similarity between query and chunk
+- `b(c)` is a graph-derived bonus based on typed structural neighborhood and graph expansion
 
 A fuller technical description of the current formulation, including graph construction, edge semantics, semantic closeness, structural closeness, and hybrid scoring, is available here:
 

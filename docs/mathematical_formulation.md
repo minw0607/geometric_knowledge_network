@@ -33,21 +33,31 @@ In this repository, the GKN combines:
 2. a **typed document-grounded network layer**
 3. a **hybrid retrieval rule** that uses both
 
+### Illustration: two views of retrieval
+
+```text
+Vector view:
+query --> semantically similar chunks
+
+Graph view:
+query --> relevant chunk --> typed entities --> related chunk(s)
+```
+
 ---
 
 ## 2. Corpus and chunk representation
 
 Let the corpus be a set of documents:
 
-\[
-\mathcal{D} = \{d_1, d_2, \dots, d_n\}
-\]
+```text
+D = {d1, d2, ..., dn}
+```
 
 Each document is chunked into retrieval units:
 
-\[
-\mathcal{C} = \{c_1, c_2, \dots, c_m\}
-\]
+```text
+C = {c1, c2, ..., cm}
+```
 
 Each chunk has metadata such as:
 
@@ -59,9 +69,9 @@ Each chunk has metadata such as:
 
 So a chunk can be viewed as:
 
-\[
-c_i = (\text{id}, \text{doc\_id}, \text{text}, \text{start}, \text{end})
-\]
+```text
+c_i = (id, doc_id, text, start, end)
+```
 
 The current MVP uses simple local chunking, but the mathematical role of a chunk is clear: it is the basic retrieval unit.
 
@@ -69,11 +79,11 @@ The current MVP uses simple local chunking, but the mathematical role of a chunk
 
 ## 3. Typed entity extraction
 
-For each chunk \(c_i\), the system extracts a set of typed entities:
+For each chunk `c_i`, the system extracts a set of typed entities:
 
-\[
-E(c_i) = \{e_{i1}, e_{i2}, \dots, e_{ik}\}
-\]
+```text
+E(c_i) = {e_i1, e_i2, ..., e_ik}
+```
 
 Each extracted entity has:
 
@@ -84,14 +94,9 @@ Each extracted entity has:
 
 So an entity can be represented as:
 
-\[
-e = (\text{id}, \text{label}, \tau, \gamma)
-\]
-
-where:
-
-- \(\tau\) is the entity type
-- \(\gamma \in [0,1]\) is a heuristic confidence score
+```text
+e = (id, label, type, confidence)
+```
 
 ### Current entity types
 
@@ -118,30 +123,44 @@ This extraction is not yet a learned semantic parser. It is a pragmatic structur
 
 The knowledge network is represented as a graph:
 
-\[
-G = (V, \mathcal{E})
-\]
+```text
+G = (V, E)
+```
 
 where:
 
-- \(V\) is the set of nodes
-- \(\mathcal{E}\) is the set of typed edges
+- `V` is the set of nodes
+- `E` is the set of typed edges
 
 ### 4.1 Node sets
 
 The node set is the union of:
 
-\[
-V = V_D \cup V_C \cup V_E
-\]
+```text
+V = V_D ∪ V_C ∪ V_E
+```
 
 where:
 
-- \(V_D\): document nodes
-- \(V_C\): chunk nodes
-- \(V_E\): extracted entity nodes
+- `V_D`: document nodes
+- `V_C`: chunk nodes
+- `V_E`: extracted entity nodes
 
 So the graph explicitly contains both source-document structure and extracted conceptual structure.
+
+### Illustration: network layout
+
+```text
+Document
+  |
+  +-- Chunk
+        |
+        +-- Requirement
+        +-- Control
+        +-- Evidence
+        +-- Incident
+        +-- Concept
+```
 
 ---
 
@@ -158,27 +177,27 @@ The graph currently uses typed edges such as:
 
 ### 5.1 Document containment
 
-If document \(d\) contains chunk \(c\), then:
+If document `d` contains chunk `c`, then:
 
-\[
-(d, c) \in \mathcal{E}_{\text{CONTAINS}}
-\]
+```text
+(d, c) ∈ E_CONTAINS
+```
 
 ### 5.2 Chunk mentions entity
 
-If chunk \(c\) mentions entity \(e\), then:
+If chunk `c` mentions entity `e`, then:
 
-\[
-(c, e) \in \mathcal{E}_{\text{MENTIONS}}
-\]
+```text
+(c, e) ∈ E_MENTIONS
+```
 
 ### 5.3 Entity-entity structure
 
 If two entities co-occur in a chunk and satisfy certain type-pair rules, they may be connected by a typed edge such as:
 
-\[
-(e_a, e_b) \in \mathcal{E}_{\text{REQUIRES}},\; \mathcal{E}_{\text{SUPPORTS}},\; \mathcal{E}_{\text{TRIGGERS}},\; \mathcal{E}_{\text{RELATED\_TO}}
-\]
+```text
+(e_a, e_b) ∈ E_REQUIRES, E_SUPPORTS, E_TRIGGERS, or E_RELATED_TO
+```
 
 Examples:
 
@@ -187,17 +206,21 @@ Examples:
 - Incident–Control may induce `TRIGGERS`
 - otherwise the edge may default to `RELATED_TO`
 
-So the total edge set is:
+So the total edge set can be viewed as:
 
-\[
-\mathcal{E} =
-\mathcal{E}_{\text{CONTAINS}} \cup
-\mathcal{E}_{\text{MENTIONS}} \cup
-\mathcal{E}_{\text{REQUIRES}} \cup
-\mathcal{E}_{\text{SUPPORTS}} \cup
-\mathcal{E}_{\text{TRIGGERS}} \cup
-\mathcal{E}_{\text{RELATED\_TO}}
-\]
+```text
+E = E_CONTAINS ∪ E_MENTIONS ∪ E_REQUIRES ∪ E_SUPPORTS ∪ E_TRIGGERS ∪ E_RELATED_TO
+```
+
+### Illustration: an example evidence path
+
+```text
+Document
+  -> Chunk
+      -> Requirement
+      -> Evidence
+      -> Control
+```
 
 ---
 
@@ -205,19 +228,19 @@ So the total edge set is:
 
 The baseline retriever scores chunks by semantic similarity to the query.
 
-Let the query be \(q\). Let \(\phi(\cdot)\) denote the text representation used by the baseline retriever.
+Let the query be `q`. Let `phi(.)` denote the text representation used by the baseline retriever.
 
-In the current MVP, \(\phi\) is a TF-IDF vectorizer, so baseline similarity is:
+In the current MVP, `phi` is a TF-IDF vectorizer, so baseline similarity is:
 
-\[
-s_{\text{vec}}(q, c_i) = \cos(\phi(q), \phi(c_i))
-\]
+```text
+s_vec(q, c_i) = cos(phi(q), phi(c_i))
+```
 
-The baseline top-\(k\) result set is:
+The baseline top-k result set is:
 
-\[
-R_{\text{base}}(q) = \operatorname{TopK}_{c_i \in \mathcal{C}}\; s_{\text{vec}}(q, c_i)
-\]
+```text
+R_base(q) = TopK over chunks of s_vec(q, c_i)
+```
 
 This gives a ranking based only on textual similarity.
 
@@ -239,17 +262,17 @@ A graph introduces a second notion of closeness.
 
 Instead of asking only whether two texts are semantically similar, we can ask whether two nodes are near each other in the graph:
 
-\[
-\operatorname{dist}_G(u, v)
-\]
+```text
+dist_G(u, v)
+```
 
-where \(\operatorname{dist}_G\) is shortest-path distance in the graph.
+where `dist_G` is shortest-path distance in the graph.
 
 This induces a notion of structural closeness:
 
-\[
-\operatorname{closeness}_G(u, v) \propto \frac{1}{\operatorname{dist}_G(u, v)}
-\]
+```text
+closeness_G(u, v) ∝ 1 / dist_G(u, v)
+```
 
 for connected nodes.
 
@@ -263,6 +286,17 @@ Two chunks may not be nearest neighbors in text space, but they may still be str
 
 This is exactly the type of relation a vector store alone does not explicitly encode.
 
+### Illustration: semantic vs structural closeness
+
+```text
+Semantic closeness:
+query ~ chunk because the wording is similar
+
+Structural closeness:
+chunk A ~ chunk B because they are connected through
+Requirement -> Control -> Evidence -> Incident structure
+```
+
 ---
 
 ## 8. Hybrid retrieval in the current MVP
@@ -271,19 +305,19 @@ The hybrid retriever begins with baseline vector hits and then uses the graph to
 
 ### Step 1: baseline seed set
 
-Take the top-\(k\) baseline results:
+Take the top-k baseline results:
 
-\[
-S(q) = \{c_{(1)}, c_{(2)}, \dots, c_{(k)}\}
-\]
+```text
+S(q) = {c_(1), c_(2), ..., c_(k)}
+```
 
 ### Step 2: local graph neighborhood
 
-For each seed chunk \(c\), compute the graph neighborhood within hop cutoff \(h\):
+For each seed chunk `c`, compute the graph neighborhood within hop cutoff `h`:
 
-\[
-N_h(c) = \{v \in V : \operatorname{dist}_G(c, v) \le h\}
-\]
+```text
+N_h(c) = {v in V : dist_G(c, v) <= h}
+```
 
 ### Step 3: graph bonus
 
@@ -291,15 +325,15 @@ The current MVP assigns a heuristic graph bonus based on the number of nearby st
 
 A simplified version of the implemented score is:
 
-\[
-b(c) = \alpha \cdot n_{\text{structured}}(c) + \beta \cdot n_{\text{related}}(c)
-\]
+```text
+b(c) = alpha * n_structured(c) + beta * n_related(c)
+```
 
 where:
 
-- \(n_{\text{structured}}(c)\) counts nearby typed nodes such as Requirement, Control, Evidence, Incident, or Concept
-- \(n_{\text{related}}(c)\) captures how connected those nearby nodes are
-- \(\alpha, \beta > 0\) are heuristic weights
+- `n_structured(c)` counts nearby typed nodes such as Requirement, Control, Evidence, Incident, or Concept
+- `n_related(c)` captures how connected those nearby nodes are
+- `alpha, beta > 0` are heuristic weights
 
 In the current implementation, these are fixed hand-tuned coefficients.
 
@@ -307,27 +341,37 @@ In the current implementation, these are fixed hand-tuned coefficients.
 
 For seed chunks, the final score is:
 
-\[
-s_{\text{hyb}}(q, c) = s_{\text{vec}}(q, c) + b(c)
-\]
+```text
+s_hyb(q, c) = s_vec(q, c) + b(c)
+```
 
 ### Step 5: graph-expanded chunk candidates
 
-The retriever may also add neighboring chunk candidates if they are within hop distance \(h\) of a seed chunk:
+The retriever may also add neighboring chunk candidates if they are within hop distance `h` of a seed chunk:
 
-\[
-c' \in \mathcal{C}, \quad \operatorname{dist}_G(c, c') \le h
-\]
+```text
+c' in C, and dist_G(c, c') <= h
+```
 
 These candidates receive a structural score based on graph distance, for example:
 
-\[
-s_{\text{expand}}(c') = \max_{c \in S(q)} \frac{\lambda}{\operatorname{dist}_G(c, c')}
-\]
+```text
+s_expand(c') = max over c in S(q) of lambda / dist_G(c, c')
+```
 
-for some fixed \(\lambda > 0\).
+for some fixed `lambda > 0`.
 
 These expanded chunk candidates are then merged with the baseline seeds and reranked.
+
+### Illustration: hybrid expansion
+
+```text
+Query
+  -> top-k vector chunks
+      -> graph neighborhood
+          -> additional chunk candidates
+              -> final reranked set
+```
 
 ---
 
@@ -337,17 +381,17 @@ The current system therefore combines two fundamentally different retrieval sign
 
 ### 9.1 Semantic closeness
 
-\[
-\text{semantic closeness}(q, c) = \cos(\phi(q), \phi(c))
-\]
+```text
+semantic closeness(q, c) = cos(phi(q), phi(c))
+```
 
 This captures textual / representational similarity.
 
 ### 9.2 Structural closeness
 
-\[
-\text{structural closeness}(c_i, c_j) \propto \frac{1}{\operatorname{dist}_G(c_i, c_j)}
-\]
+```text
+structural closeness(c_i, c_j) ∝ 1 / dist_G(c_i, c_j)
+```
 
 This captures graph proximity through typed relationships.
 
@@ -432,27 +476,27 @@ The current MVP uses heuristic graph weights. A more advanced version could form
 
 For example, one could define:
 
-\[
-s(q, c) = \alpha \cdot s_{\text{vec}}(q, c) + \beta \cdot s_{\text{path}}(q, c) + \gamma \cdot s_{\text{prov}}(q, c)
-\]
+```text
+s(q, c) = alpha * s_vec(q, c) + beta * s_path(q, c) + gamma * s_prov(q, c)
+```
 
 where:
 
-- \(s_{\text{vec}}\): embedding-based relevance
-- \(s_{\text{path}}\): path-based graph relevance
-- \(s_{\text{prov}}\): provenance / evidence support score
-- \(\alpha, \beta, \gamma\): tunable weights
+- `s_vec`: embedding-based relevance
+- `s_path`: path-based graph relevance
+- `s_prov`: provenance / evidence support score
+- `alpha, beta, gamma`: tunable weights
 
 One could also make graph relevance explicitly query-aware:
 
-\[
-s_{\text{path}}(q, c) = \sum_{p \in P(q, c)} w(p)
-\]
+```text
+s_path(q, c) = sum over paths p in P(q, c) of w(p)
+```
 
 where:
 
-- \(P(q,c)\) is a set of graph paths linking query-relevant concepts to chunk \(c\)
-- \(w(p)\) is a path weight that depends on edge types, node types, and confidence scores
+- `P(q, c)` is a set of graph paths linking query-relevant concepts to chunk `c`
+- `w(p)` is a path weight that depends on edge types, node types, and confidence scores
 
 This would move the system closer to a more formal graph-geometric retrieval model.
 
