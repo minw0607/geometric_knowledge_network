@@ -35,13 +35,9 @@ In this repository, the GKN combines:
 
 ### Illustration: two views of retrieval
 
-```text
-Vector view:
-query --> semantically similar chunks
-
-Graph view:
-query --> relevant chunk --> typed entities --> related chunk(s)
-```
+<p align="center">
+  <img src="images/baseline_vs_hybrid.png" alt="Baseline vs hybrid retrieval" width="900">
+</p>
 
 ---
 
@@ -150,17 +146,9 @@ So the graph explicitly contains both source-document structure and extracted co
 
 ### Illustration: network layout
 
-```text
-Document
-  |
-  +-- Chunk
-        |
-        +-- Requirement
-        +-- Control
-        +-- Evidence
-        +-- Incident
-        +-- Concept
-```
+<p align="center">
+  <img src="images/gkn_architecture_overview.png" alt="GKN architecture overview" width="900">
+</p>
 
 ---
 
@@ -288,14 +276,9 @@ This is exactly the type of relation a vector store alone does not explicitly en
 
 ### Illustration: semantic vs structural closeness
 
-```text
-Semantic closeness:
-query ~ chunk because the wording is similar
-
-Structural closeness:
-chunk A ~ chunk B because they are connected through
-Requirement -> Control -> Evidence -> Incident structure
-```
+<p align="center">
+  <img src="images/math_semantic_vs_structural.png" alt="Semantic vs structural closeness" width="850">
+</p>
 
 ---
 
@@ -501,6 +484,12 @@ where:
 This would move the system closer to a more formal graph-geometric retrieval model.
 
 ---
+
+### Illustration: example subgraph from the current MVP
+
+<p align="center">
+  <img src="images/example_subgraph.png" alt="Example subgraph" width="850">
+</p>
 
 ## 13. Bottom line
 

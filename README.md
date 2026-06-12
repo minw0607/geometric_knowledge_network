@@ -26,6 +26,10 @@ Traditional vector-store retrieval is very effective at semantic similarity. How
 
 This repository implements a **Geometric Knowledge Network (GKN)** as a lightweight enhancement layer over baseline RAG retrieval.
 
+<p align="center">
+  <img src="docs/images/gkn_architecture_overview.png" alt="GKN architecture overview" width="900">
+</p>
+
 ### At a glance
 
 - **Problem:** vector-only RAG is strong on similarity but weaker on structure and traceability.
@@ -103,6 +107,10 @@ For the MVP, “geometric” is implemented pragmatically through **embedding sp
 ---
 
 ## How GKN differs from a traditional vector store in RAG
+
+<p align="center">
+  <img src="docs/images/baseline_vs_hybrid.png" alt="Baseline vs hybrid retrieval" width="900">
+</p>
 
 | Dimension | Traditional vector-store RAG | GKN-enhanced RAG |
 |---|---|---|
@@ -378,6 +386,10 @@ where:
 
 - `s_vec(q, c)` is semantic similarity between query and chunk
 - `b(c)` is a graph-derived bonus based on typed structural neighborhood and graph expansion
+
+<p align="center">
+  <img src="docs/images/math_semantic_vs_structural.png" alt="Semantic vs structural closeness" width="850">
+</p>
 
 A fuller technical description of the current formulation, including graph construction, edge semantics, semantic closeness, structural closeness, and hybrid scoring, is available here:
 
