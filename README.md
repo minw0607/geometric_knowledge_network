@@ -54,6 +54,7 @@ This repository implements a **Geometric Knowledge Network (GKN)** as a lightwei
 - [Current limitations](#current-limitations)
 - [Planned enhancement path](#planned-enhancement-path)
 - [Conceptual grounding](#conceptual-grounding)
+- [Mathematical formulation](#mathematical-formulation)
 - [References and related resources](#references-and-related-resources)
 - [License](#license)
 - [Status](#status)
@@ -353,6 +354,34 @@ This repository is inspired by a practical interpretation of several overlapping
 - **Geometry discovery**: useful learning systems often discover structure, similarity, transformation, and path rather than only optimize raw matching
 
 This repo takes those ideas and applies them in a pragmatic local MVP for document-grounded RAG.
+
+---
+
+## 🔢 Mathematical formulation
+
+A concise mathematical view of the current GKN is:
+
+- let \(\mathcal{D}\) be the document set and \(\mathcal{C}\) be the chunk set
+- let \(E(c)\) denote the typed entities extracted from chunk \(c\)
+- construct a graph \(G=(V,\mathcal{E})\) over documents, chunks, and entities
+- compute baseline retrieval using semantic similarity \(s_{\text{vec}}(q,c)\)
+- compute structural relevance using graph neighborhoods and typed relations
+- combine them into a hybrid retrieval score
+
+At a high level:
+
+\[
+s_{\text{hyb}}(q,c) = s_{\text{vec}}(q,c) + b(c)
+\]
+
+where:
+
+- \(s_{\text{vec}}(q,c)\) is semantic similarity between query and chunk
+- \(b(c)\) is a graph-derived bonus based on typed structural neighborhood and graph expansion
+
+A fuller technical description of the current formulation, including graph construction, edge semantics, semantic closeness, structural closeness, and hybrid scoring, is available here:
+
+- [Mathematical Formulation of the Geometric Knowledge Network](docs/mathematical_formulation.md)
 
 ---
 
