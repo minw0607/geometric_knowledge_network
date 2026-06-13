@@ -1,4 +1,4 @@
-# Mathematical Formulation of the Geometric Knowledge Network
+# Theoretical Formulation of the Geometric Knowledge Network
 
 This document provides a technical but intuitive description of the current **Geometric Knowledge Network (GKN)** used in this repository.
 
@@ -112,6 +112,20 @@ Extraction is currently heuristic and rule-based. For example:
 - drift / incident language generates **Incident** nodes
 
 This extraction is not yet a learned semantic parser. It is a pragmatic structured layer over the text.
+
+### What “entity” means in this repo
+
+An **entity** is a typed item extracted from a chunk of document text that becomes its own graph node.
+
+Examples include:
+
+- a requirement statement
+- a control identifier such as `Control C-101`
+- an evidence-related phrase
+- an incident or drift-related phrase
+- a more general concept like `monitoring` or `validation`
+
+Entities are therefore **document-derived**. They depend on the content of the current corpus. Different documents may generate different entities, while overlapping labels or normalized forms can connect information across documents.
 
 ---
 
@@ -355,6 +369,50 @@ Query
           -> additional chunk candidates
               -> final reranked set
 ```
+
+### Worked example
+
+Suppose the query is:
+
+> **Which control requires annual review of production AI systems?**
+
+A possible baseline result might be a chunk containing a requirement-like statement:
+
+```text
+Chunk A: annual review is required for production AI systems
+```
+
+From that chunk, the graph may extract or connect:
+
+```text
+Chunk A -> Requirement: annual review is required
+```
+
+If the graph also contains a control relation such as:
+
+```text
+Requirement -> Control C-101
+```
+
+and another chunk mentions that control:
+
+```text
+Chunk B -> Control C-101
+```
+
+then the graph provides a path:
+
+```text
+Chunk A -> Requirement -> Control C-101 -> Chunk B
+```
+
+This means `Chunk B` may become relevant even if it was not among the strongest semantic matches in the baseline ranking.
+
+This is the practical meaning of graph-enhanced retrieval in the current system:
+
+- baseline retrieval provides the initial semantic anchors
+- graph expansion provides structurally related candidates
+- final scoring combines both signals
 
 ---
 

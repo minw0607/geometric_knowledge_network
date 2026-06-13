@@ -58,7 +58,7 @@ This repository implements a **Geometric Knowledge Network (GKN)** as a lightwei
 - [Current limitations](#-current-limitations)
 - [Planned enhancement path](#-planned-enhancement-path)
 - [Conceptual grounding](#-conceptual-grounding)
-- [Mathematical formulation](#-mathematical-formulation)
+- [Theoretical formulation](#-theoretical-formulation)
 - [References and related resources](#-references-and-related-resources)
 - [License](#-license)
 - [Status](#-status)
@@ -365,9 +365,9 @@ This repo takes those ideas and applies them in a pragmatic local MVP for docume
 
 ---
 
-## 🔢 Mathematical formulation
+## 🔢 Theoretical formulation
 
-A concise mathematical view of the current GKN is:
+A concise theoretical view of the current GKN is:
 
 - let `D` be the document set and `C` be the chunk set
 - let `E(c)` denote the typed entities extracted from chunk `c`
@@ -391,9 +391,42 @@ where:
   <img src="docs/images/math_semantic_vs_structural.png" alt="Semantic vs structural closeness" width="850">
 </p>
 
-A fuller technical description of the current formulation, including graph construction, edge semantics, semantic closeness, structural closeness, and hybrid scoring, is available here:
+### Intuitive interpretation
 
-- [Mathematical Formulation of the Geometric Knowledge Network](docs/mathematical_formulation.md)
+In the current prototype:
+
+- **documents generate chunks**
+- **chunks generate typed entities** such as requirements, controls, evidence, incidents, and concepts
+- those entities become graph nodes
+- graph edges connect chunks to what they mention, and connect entity pairs through typed relations
+
+This means the graph is **document-grounded** rather than a universal pre-built ontology. Different documents may generate different entities, while overlapping entities can connect related content across documents.
+
+### Example retrieval flow
+
+Suppose the query is:
+
+> **Which control requires annual review of production AI systems?**
+
+A simplified hybrid retrieval process looks like this:
+
+1. **Baseline retrieval** finds the top semantically similar chunks.
+2. One top chunk may contain a requirement like `annual review is required`.
+3. The graph may connect that requirement to a control such as `Control C-101`.
+4. Another chunk that mentions `Control C-101` can then be pulled in through graph expansion.
+5. The final ranking combines semantic relevance and structural relevance.
+
+A simplified path might look like:
+
+```text
+Chunk A -> Requirement -> Control C-101 -> Chunk B
+```
+
+So even if `Chunk B` was not among the strongest semantic matches initially, it can still become relevant because it is **structurally close** to the retrieved evidence.
+
+A fuller technical description of the current formulation, including graph construction, entity interpretation, semantic closeness, structural closeness, hybrid scoring, and worked examples, is available here:
+
+- [Theoretical Formulation of the Geometric Knowledge Network](docs/mathematical_formulation.md)
 
 ---
 
