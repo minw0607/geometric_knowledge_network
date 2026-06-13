@@ -46,22 +46,16 @@ This repository implements a **Geometric Knowledge Network (GKN)** as a lightwei
 - [Why this work matters](#why-this-work-matters)
 - [What is a Geometric Knowledge Network in this repo?](#what-is-a-geometric-knowledge-network-in-this-repo)
 - [How GKN differs from a traditional vector store in RAG](#how-gkn-differs-from-a-traditional-vector-store-in-rag)
-- [Key differentiators](#-key-differentiators)
-- [Design principles](#-design-principles)
-- [Current MVP capabilities](#-current-mvp-capabilities)
-- [Architecture](#-architecture)
-- [Why the sample docs are synthetic](#-why-the-sample-docs-are-synthetic)
-- [Repository layout](#-repository-layout)
-- [Quick start](#-quick-start)
-- [What the demo notebook is intended to show](#-what-the-demo-notebook-is-intended-to-show)
-- [Local outputs and artifacts](#-local-outputs-and-artifacts)
-- [Current limitations](#-current-limitations)
-- [Planned enhancement path](#-planned-enhancement-path)
-- [Conceptual grounding](#-conceptual-grounding)
 - [Theoretical formulation](#-theoretical-formulation)
+- [Key differentiators](#-key-differentiators)
+- [Architecture](#-architecture)
+- [Current implementation](#-current-implementation)
+- [Quick start](#-quick-start)
+- [Demo workflow and outputs](#-demo-workflow-and-outputs)
+- [Current limitations and roadmap](#-current-limitations-and-roadmap)
+- [Conceptual grounding](#-conceptual-grounding)
 - [References and related resources](#-references-and-related-resources)
-- [License](#-license)
-- [Status](#-status)
+- [License and status](#-license-and-status)
 
 ---
 
@@ -126,6 +120,71 @@ For the MVP, “geometric” is implemented pragmatically through **embedding sp
 
 ---
 
+## 🔢 Theoretical formulation
+
+A concise theoretical view of the current GKN is:
+
+- let `D` be the document set and `C` be the chunk set
+- let `E(c)` denote the typed entities extracted from chunk `c`
+- construct a graph `G = (V, E)` over documents, chunks, and entities
+- compute baseline retrieval using semantic similarity `s_vec(q, c)`
+- compute structural relevance using graph neighborhoods and typed relations
+- combine them into a hybrid retrieval score
+
+At a high level:
+
+```text
+s_hyb(q, c) = s_vec(q, c) + b(c)
+```
+
+where:
+
+- `s_vec(q, c)` is semantic similarity between query and chunk
+- `b(c)` is a graph-derived bonus based on typed structural neighborhood and graph expansion
+
+<p align="center">
+  <img src="docs/images/math_semantic_vs_structural.png" alt="Semantic vs structural closeness" width="850">
+</p>
+
+### Intuitive interpretation
+
+In the current prototype:
+
+- **documents generate chunks**
+- **chunks generate typed entities** such as requirements, controls, evidence, incidents, and concepts
+- those entities become graph nodes
+- graph edges connect chunks to what they mention, and connect entity pairs through typed relations
+
+This means the graph is **document-grounded** rather than a universal pre-built ontology. Different documents may generate different entities, while overlapping entities can connect related content across documents.
+
+### Example retrieval flow
+
+Suppose the query is:
+
+> **Which control requires annual review of production AI systems?**
+
+A simplified hybrid retrieval process looks like this:
+
+1. **Baseline retrieval** finds the top semantically similar chunks.
+2. One top chunk may contain a requirement like `annual review is required`.
+3. The graph may connect that requirement to a control such as `Control C-101`.
+4. Another chunk that mentions `Control C-101` can then be pulled in through graph expansion.
+5. The final ranking combines semantic relevance and structural relevance.
+
+A simplified path might look like:
+
+```text
+Chunk A -> Requirement -> Control C-101 -> Chunk B
+```
+
+So even if `Chunk B` was not among the strongest semantic matches initially, it can still become relevant because it is **structurally close** to the retrieved evidence.
+
+A fuller technical description of the current formulation, including graph construction, entity interpretation, semantic closeness, structural closeness, hybrid scoring, and worked examples, is available here:
+
+- [Theoretical Formulation of the Geometric Knowledge Network](docs/mathematical_formulation.md)
+
+---
+
 ## ✨ Key differentiators
 
 What makes this repository different from a typical lightweight RAG demo:
@@ -136,40 +195,6 @@ What makes this repository different from a typical lightweight RAG demo:
 - **Evaluation-first design** with benchmark queries and comparison utilities
 - **Inspectable local artifacts** for results, reports, graph summaries, and figures
 - **Modular package architecture** with notebooks used mainly for orchestration
-
----
-
-## 🧭 Design principles
-
-This repository follows a deliberately pragmatic architecture.
-
-- **Local-first**: no enterprise infrastructure required for the MVP
-- **Modular**: notebooks are orchestration layers; implementation lives in `src/`
-- **Document-grounded**: graph nodes and edges remain tied to source text
-- **Evaluation-first**: the repository is built to compare baseline and hybrid retrieval
-- **Inspectable**: outputs, graph summaries, and reports should be saved locally
-- **Incremental**: start with lightweight typed heuristics before adding heavier extraction methods
-
----
-
-## 🧩 Current MVP capabilities
-
-The repository currently includes:
-
-- sample governance / validation / control documents in `data/sample_docs/`
-- document ingestion and chunking
-- a baseline vector retriever
-- heuristic typed extraction for:
-  - requirements
-  - controls
-  - evidence
-  - incidents
-  - generic concepts
-- a lightweight NetworkX-based knowledge network
-- hybrid retrieval with graph-aware candidate expansion
-- a benchmark query set in `data/eval_queries.json`
-- a demo notebook for baseline vs hybrid exploration
-- local artifact saving support for results, reports, figures, and graph summaries
 
 ---
 
@@ -250,6 +275,40 @@ geometric_knowledge_network/
 
 ---
 
+## 🧩 Current implementation
+
+The current implementation follows a deliberately pragmatic architecture.
+
+### Implementation approach
+
+- **Local-first**: no enterprise infrastructure required for the MVP
+- **Modular**: notebooks are orchestration layers; implementation lives in `src/`
+- **Document-grounded**: graph nodes and edges remain tied to source text
+- **Evaluation-first**: the repository is built to compare baseline and hybrid retrieval
+- **Inspectable**: outputs, graph summaries, and reports are saved locally
+- **Incremental**: start with lightweight typed heuristics before adding heavier extraction methods
+
+### Current MVP capabilities
+
+The repository currently includes:
+
+- sample governance / validation / control documents in `data/sample_docs/`
+- document ingestion and chunking
+- a baseline vector retriever
+- heuristic typed extraction for:
+  - requirements
+  - controls
+  - evidence
+  - incidents
+  - generic concepts
+- a lightweight NetworkX-based knowledge network
+- hybrid retrieval with graph-aware candidate expansion
+- a benchmark query set in `data/eval_queries.json`
+- a demo notebook for baseline vs hybrid exploration
+- local artifact saving support for results, reports, figures, and graph summaries
+
+---
+
 ## 🚀 Quick start
 
 ### 1. Create and activate a virtual environment
@@ -276,7 +335,9 @@ The notebook is intentionally code-light and delegates implementation to the Pyt
 
 ---
 
-## 📓 What the demo notebook is intended to show
+## 📓 Demo workflow and outputs
+
+### What the demo notebook shows
 
 The notebook walks through:
 
@@ -291,9 +352,7 @@ The notebook walks through:
 9. evaluating over a small benchmark query set
 10. saving results and reports locally
 
----
-
-## 💾 Local outputs and artifacts
+### Saved artifacts
 
 The repository is designed to save outputs locally so results are inspectable and reproducible.
 
@@ -314,11 +373,11 @@ These can contain:
 
 ---
 
-## ⚠️ Current limitations
+## ⚠️ Current limitations and roadmap
 
 This is an MVP and not yet a production system.
 
-Current limitations include:
+### Current limitations
 
 - heuristic extraction rather than high-accuracy structured extraction
 - TF-IDF baseline retrieval rather than stronger embedding models
@@ -328,10 +387,6 @@ Current limitations include:
 - no public benchmark adapter yet
 
 > These limitations are intentional for the current phase: the focus is to validate whether a lightweight knowledge network can produce measurable value over vector-only retrieval.
-
----
-
-## 🛣️ Planned enhancement path
 
 ### Near-term improvements
 
@@ -362,71 +417,6 @@ This repository is inspired by a practical interpretation of several overlapping
 - **Geometry discovery**: useful learning systems often discover structure, similarity, transformation, and path rather than only optimize raw matching
 
 This repo takes those ideas and applies them in a pragmatic local MVP for document-grounded RAG.
-
----
-
-## 🔢 Theoretical formulation
-
-A concise theoretical view of the current GKN is:
-
-- let `D` be the document set and `C` be the chunk set
-- let `E(c)` denote the typed entities extracted from chunk `c`
-- construct a graph `G = (V, E)` over documents, chunks, and entities
-- compute baseline retrieval using semantic similarity `s_vec(q, c)`
-- compute structural relevance using graph neighborhoods and typed relations
-- combine them into a hybrid retrieval score
-
-At a high level:
-
-```text
-s_hyb(q, c) = s_vec(q, c) + b(c)
-```
-
-where:
-
-- `s_vec(q, c)` is semantic similarity between query and chunk
-- `b(c)` is a graph-derived bonus based on typed structural neighborhood and graph expansion
-
-<p align="center">
-  <img src="docs/images/math_semantic_vs_structural.png" alt="Semantic vs structural closeness" width="850">
-</p>
-
-### Intuitive interpretation
-
-In the current prototype:
-
-- **documents generate chunks**
-- **chunks generate typed entities** such as requirements, controls, evidence, incidents, and concepts
-- those entities become graph nodes
-- graph edges connect chunks to what they mention, and connect entity pairs through typed relations
-
-This means the graph is **document-grounded** rather than a universal pre-built ontology. Different documents may generate different entities, while overlapping entities can connect related content across documents.
-
-### Example retrieval flow
-
-Suppose the query is:
-
-> **Which control requires annual review of production AI systems?**
-
-A simplified hybrid retrieval process looks like this:
-
-1. **Baseline retrieval** finds the top semantically similar chunks.
-2. One top chunk may contain a requirement like `annual review is required`.
-3. The graph may connect that requirement to a control such as `Control C-101`.
-4. Another chunk that mentions `Control C-101` can then be pulled in through graph expansion.
-5. The final ranking combines semantic relevance and structural relevance.
-
-A simplified path might look like:
-
-```text
-Chunk A -> Requirement -> Control C-101 -> Chunk B
-```
-
-So even if `Chunk B` was not among the strongest semantic matches initially, it can still become relevant because it is **structurally close** to the retrieved evidence.
-
-A fuller technical description of the current formulation, including graph construction, entity interpretation, semantic closeness, structural closeness, hybrid scoring, and worked examples, is available here:
-
-- [Theoretical Formulation of the Geometric Knowledge Network](docs/mathematical_formulation.md)
 
 ---
 
@@ -478,12 +468,8 @@ A fuller technical description of the current formulation, including graph const
 
 ---
 
-## 📄 License
+## 📄 License and status
 
 This project is licensed under the [MIT License](LICENSE).
-
----
-
-## 📌 Status
 
 > **Current status:** early-stage local MVP focused on building a credible and inspectable comparison between baseline vector retrieval and GKN-enhanced retrieval.
