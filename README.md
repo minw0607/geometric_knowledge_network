@@ -180,8 +180,7 @@ geometric_knowledge_network/
 │
 ├── notebooks/
 │   ├── 99_end_to_end_demo.ipynb                  # governance demo
-│   ├── 11_hotpotqa_knowledge_network_demo.ipynb  # HotpotQA demo (fair benchmark)
-│   └── 10_hotpotqa_gkn_benchmark.ipynb           # compact HotpotQA benchmark
+│   └── 11_hotpotqa_knowledge_network_demo.ipynb  # HotpotQA demo (fair benchmark)
 │
 ├── src/geometric_knowledge_network/
 │   ├── config.py               # env-driven configuration
