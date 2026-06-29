@@ -1,247 +1,176 @@
-# Geometric Knowledge Network
+# Geometric Knowledge Network (GKN)
 
-> A modular, local-first framework for enhancing RAG retrieval with a document-grounded geometric knowledge network.
+> A pragmatic, local-first framework for **document-grounded reasoning, evidence traceability, and AI evaluation** — built by augmenting vector retrieval with a lightweight, inspectable knowledge graph.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Core idea:** a vector store tells us what is semantically close; a geometric knowledge network helps tell us what is structurally connected, supporting, dependent, or implicated.
+> **Core idea:** a vector store tells us what is *semantically close*; a geometric knowledge network adds what is *structurally connected* — supporting, dependent, mapped, or implicated — and makes the evidence path visible.
 
 ---
 
-## 🌐 Overview
+## 🌐 Working thesis
 
-This repository explores a practical question at the intersection of **RAG**, **knowledge graphs**, and **AI evaluation**:
+A full enterprise-scale knowledge graph is expensive to build and hard to govern. This project takes the pragmatic middle path:
 
-> **Can retrieval quality, traceability, and multi-hop grounding improve when a vector store is augmented with a lightweight geometric knowledge network?**
+> **raw documents + vector embeddings + a lightweight knowledge graph + traces + LLM orchestration.**
 
-The answer pursued here is not to replace embeddings, but to **complement** them.
+This gives much of the benefit of graph-geometric reasoning — multi-hop retrieval, explicit evidence paths, structural relevance — **without** requiring a universal world model, a graph database, or graph neural networks up front. The graph is treated as an *indexed, reviewable layer over the source documents*, not as the ultimate source of truth.
 
-Traditional vector-store retrieval is very effective at semantic similarity. However, many document-grounded workflows require more than semantic closeness. They also require:
+The framework is being built **general-purpose first, then specialized per use case** (see [Use cases](#-use-cases)). The two reference adapters today are **AI governance / model-risk documents** and the **HotpotQA** multi-hop QA benchmark.
 
-- explicit support paths from source text to answer
-- mapping between requirements, controls, evidence, and incidents
-- multi-hop retrieval over related concepts
-- visibility into why a chunk was surfaced
-- a structured layer for evaluation and governance
-
-This repository implements a **Geometric Knowledge Network (GKN)** as a lightweight enhancement layer over baseline RAG retrieval.
-
-<p align="center">
-  <img src="docs/images/gkn_architecture_overview.png" alt="GKN architecture overview" width="900">
-</p>
-
-### At a glance
-
-- **Problem:** vector-only RAG is strong on similarity but weaker on structure and traceability.
-- **Approach:** augment a vector store with a document-grounded knowledge network.
-- **Use case focus:** governance, validation, evidence mapping, and multi-hop retrieval.
-- **Style:** modular, local-first, inspectable, notebook-light.
-- **Goal:** compare baseline retrieval with GKN-enhanced retrieval in a reproducible way.
+> ⚠️ **Status & scope:** this is an early-stage, evolving research MVP. The architecture and schema below are an *initial plan* and are expected to change as experiments accumulate. Treat numbers and design choices as provisional.
 
 ---
 
 ## 📚 Table of contents
 
-- [Overview](#-overview)
 - [Why this work matters](#why-this-work-matters)
-- [What is a Geometric Knowledge Network in this repo?](#what-is-a-geometric-knowledge-network-in-this-repo)
-- [How GKN differs from a traditional vector store in RAG](#how-gkn-differs-from-a-traditional-vector-store-in-rag)
-- [Theoretical formulation](#-theoretical-formulation)
-- [Key differentiators](#-key-differentiators)
+- [What is a Geometric Knowledge Network here?](#what-is-a-geometric-knowledge-network-here)
+- [GKN vs. a traditional vector store](#gkn-vs-a-traditional-vector-store)
 - [Architecture](#-architecture)
-- [Current implementation](#-current-implementation)
+- [Graph schema (initial)](#-graph-schema-initial)
+- [Theoretical formulation](#-theoretical-formulation)
+- [Use cases](#-use-cases)
+- [Repository layout](#-repository-layout)
 - [Quick start](#-quick-start)
-- [Demo workflow and outputs](#-demo-workflow-and-outputs)
-- [Current limitations and roadmap](#-current-limitations-and-roadmap)
+- [The HotpotQA benchmark (and a note on fairness)](#-the-hotpotqa-benchmark-and-a-note-on-fairness)
+- [Current status and roadmap](#-current-status-and-roadmap)
 - [Conceptual grounding](#-conceptual-grounding)
-- [References and related resources](#-references-and-related-resources)
-- [License and status](#-license-and-status)
+- [References](#-references)
+- [License](#-license)
 
 ---
 
 ## Why this work matters
 
-In many RAG systems, vector retrieval is treated as the primary retrieval substrate. That works well when the question is mainly:
+In most RAG systems, vector retrieval is the primary substrate. That works well when the question is essentially *"what text is semantically similar to this query?"*
 
-- “what text is semantically similar to this query?”
+But many high-value governance, audit, and evaluation questions are **structure** problems, not just **similarity** problems:
 
-But many high-value enterprise and governance questions are different:
+- what evidence *supports* this claim?
+- which control *maps to* this requirement?
+- what related clause should surface even if it is not the nearest chunk in embedding space?
+- what happens *downstream* if monitoring detects drift?
+- did an agent follow a *valid* reasoning/tool path?
+- can we *inspect an evidence path* rather than just trust a similarity score?
 
-- what evidence supports this statement?
-- which control maps to this requirement?
-- what related policy clause should be surfaced even if it is not the nearest chunk in embedding space?
-- what happens downstream if monitoring identifies drift?
-- can we inspect an evidence path rather than just a similarity score?
-
-These are not only **similarity** problems. They are also **structure** problems.
-
-That is the motivation for this repository.
+A geometric knowledge network is one practical infrastructure pattern for making the structure of a task explicit, so these questions become answerable and auditable.
 
 ---
 
-## What is a Geometric Knowledge Network in this repo?
+## What is a Geometric Knowledge Network here?
 
-In this project, a **Geometric Knowledge Network** is a hybrid retrieval structure that combines:
+In this project a GKN is a **hybrid representation** with four conceptual layers (only the first two are implemented in the MVP):
 
-1. **Embedding geometry**  
-   Semantic neighborhoods among chunks using vector representations.
+| Layer | What it represents | Example | MVP status |
+|---|---|---|---|
+| **Symbolic graph** | Entities and typed relationships | `Requirement —MAPS_TO→ Control` | ✅ implemented (NetworkX) |
+| **Geometric layer** | Embeddings, distances, neighborhoods | similar requirements cluster together | ✅ implemented (FAISS / TF-IDF) |
+| **Constraint layer** | Rules and directional dependencies | *a finding must be supported by evidence* | 🔜 planned |
+| **Dynamic layer** | Sequences, actions, agent traces | `prompt → retrieval → tool → answer → eval` | 🔜 planned |
 
-2. **Graph topology**  
-   Explicit typed relationships across documents, chunks, requirements, controls, evidence, incidents, and concepts.
-
-3. **Retrieval trajectories**  
-   A query can move from vector hits to graph-linked neighbors to a more grounded evidence package.
-
-This is aligned with the broader idea that useful AI systems often need both:
-- a **geometric view** of similarity and neighborhood, and
-- a **symbolic/structural view** of relationships and constraints.
-
-For the MVP, “geometric” is implemented pragmatically through **embedding space + graph structure + retrieval paths**, not through advanced non-Euclidean KG embeddings or graph neural networks.
+"Geometric" here is interpreted pragmatically: **embedding space + graph structure + retrieval paths** — not (yet) non-Euclidean KG embeddings or graph neural networks. Those are explicit later-phase options, not MVP requirements.
 
 ---
 
-## How GKN differs from a traditional vector store in RAG
+## GKN vs. a traditional vector store
 
 <p align="center">
   <img src="docs/images/baseline_vs_hybrid.png" alt="Baseline vs hybrid retrieval" width="900">
 </p>
 
-| Dimension | Traditional vector-store RAG | GKN-enhanced RAG |
+| Dimension | Vector-store RAG | GKN-enhanced RAG |
 |---|---|---|
 | Core retrieval signal | Embedding similarity | Embedding similarity + graph structure |
-| Best at | Semantically similar chunks | Similar chunks plus related evidence and linked context |
-| Multi-hop support | Limited | Stronger through graph expansion |
-| Explainability | Similarity score only | Inspectable nodes, edges, and evidence neighborhoods |
-| Traceability | Often chunk-level only | Document -> chunk -> entity/type -> related chunk paths |
-| Governance usefulness | Moderate | Higher for support mapping, evaluation, and review |
-| Failure mode | Misses structurally relevant but semantically distant chunks | Can recover linked chunks through network expansion |
+| Best at | Semantically similar chunks | Similar chunks **plus** linked/related context |
+| Multi-hop support | Limited | Stronger via graph expansion |
+| Explainability | Similarity score only | Inspectable nodes, edges, and evidence paths |
+| Traceability | Often chunk-level only | Document → chunk → entity → related chunk paths |
+| Failure mode | Misses structurally relevant but distant chunks | Can recover linked chunks through the network |
 
 > **Design distinction:** a vector store optimizes neighborhood in embedding space; GKN adds explicit relational structure that can surface relevant chunks even when they are not the nearest semantic match.
 
 ---
 
+## 🏗️ Architecture
+
+The recommended stack keeps source documents as the source of truth and layers structure on top:
+
+```text
+Raw Documents
+   │
+   ▼
+Chunking (stable evidence units + metadata)
+   │
+   ├─────────────► Vector Index ───────► Baseline Retrieval
+   ▼
+Typed Entity / Relation Extraction (heuristic now; LLM-assisted later)
+   │
+   ▼
+Geometric Knowledge Network  (NetworkX; Neo4j later)
+   │
+   ▼
+Hybrid Retrieval  (vector hits + graph expansion + re-ranking)
+   │
+   ▼
+Evaluation + Path Explanations + Reports + Figures + Saved Artifacts
+```
+
+**MVP component choices:** parsing (`pypdf`, `python-docx`), embeddings (OpenAI/Azure or local `sentence-transformers`), vector store (FAISS; TF-IDF fallback), graph store (NetworkX), orchestration (plain Python), evaluation (pandas + rule checks; LLM-as-judge later).
+
+---
+
+## 🧩 Graph schema (initial)
+
+The schema is intentionally **small** in Phase 1 — broad schemas create extraction noise and governance burden. The reference (governance) schema:
+
+**Node types:** `Document`, `Chunk`, `Requirement`, `Control`, `Evidence`, `Incident`/`Finding`, `Concept` (with `Model/AISystem`, `ValidationStep`, `AgentAction` planned).
+
+**Relationship types:** `CONTAINS`, `MENTIONS`, `REQUIRES`, `MAPS_TO`, `SUPPORTS`, `CONTRADICTS`, `DEPENDS_ON`, `CITES` (and `GENERATED_BY`, `PRECEDES` for traces).
+
+**Extraction principles (target):** every extracted node/edge carries `source_chunk_id`, a confidence score, and provenance; no relation is inferred unless explicitly supported by the source chunk. (The current MVP uses lightweight heuristic extraction; LLM-assisted extraction with provenance is a planned upgrade.)
+
+Use-case adapters (e.g. HotpotQA) define their **own** node/edge vocabulary — for HotpotQA: `Document`, `Chunk`, `TitleEntity`, `NamedEntity`, `Concept`, and corpus-derived `SHARES_ENTITY` bridge edges.
+
+---
+
 ## 🔢 Theoretical formulation
 
-A concise theoretical view of the current GKN is:
-
-- let `D` be the document set and `C` be the chunk set
-- let `E(c)` denote the typed entities extracted from chunk `c`
-- construct a graph `G = (V, E)` over documents, chunks, and entities
-- compute baseline retrieval using semantic similarity `s_vec(q, c)`
-- compute structural relevance using graph neighborhoods and typed relations
-- combine them into a hybrid retrieval score
-
-At a high level:
+At a high level, hybrid retrieval combines a semantic score and a graph-derived bonus:
 
 ```text
 s_hyb(q, c) = s_vec(q, c) + b(c)
 ```
 
-where:
-
-- `s_vec(q, c)` is semantic similarity between query and chunk
-- `b(c)` is a graph-derived bonus based on typed structural neighborhood and graph expansion
+- `s_vec(q, c)` — semantic similarity between query and chunk
+- `b(c)` — a bonus from the chunk's typed structural neighborhood and graph expansion
 
 <p align="center">
   <img src="docs/images/math_semantic_vs_structural.png" alt="Semantic vs structural closeness" width="850">
 </p>
 
-### Intuitive interpretation
+A fuller treatment (graph construction, structural closeness, worked examples) is in
+[docs/mathematical_formulation.md](docs/mathematical_formulation.md).
 
-In the current prototype:
-
-- **documents generate chunks**
-- **chunks generate typed entities** such as requirements, controls, evidence, incidents, and concepts
-- those entities become graph nodes
-- graph edges connect chunks to what they mention, and connect entity pairs through typed relations
-
-This means the graph is **document-grounded** rather than a universal pre-built ontology. Different documents may generate different entities, while overlapping entities can connect related content across documents.
-
-### Example retrieval flow
-
-Suppose the query is:
-
-> **Which control requires annual review of production AI systems?**
-
-A simplified hybrid retrieval process looks like this:
-
-1. **Baseline retrieval** finds the top semantically similar chunks.
-2. One top chunk may contain a requirement like `annual review is required`.
-3. The graph may connect that requirement to a control such as `Control C-101`.
-4. Another chunk that mentions `Control C-101` can then be pulled in through graph expansion.
-5. The final ranking combines semantic relevance and structural relevance.
-
-A simplified path might look like:
+**Example multi-hop flow:** baseline retrieval finds a chunk stating *"annual review is required"*; the graph links that requirement to `Control C-101`; another chunk mentioning `C-101` is pulled in via graph expansion even though it was not a top semantic match:
 
 ```text
-Chunk A -> Requirement -> Control C-101 -> Chunk B
-```
-
-So even if `Chunk B` was not among the strongest semantic matches initially, it can still become relevant because it is **structurally close** to the retrieved evidence.
-
-A fuller technical description of the current formulation, including graph construction, entity interpretation, semantic closeness, structural closeness, hybrid scoring, and worked examples, is available here:
-
-- [Theoretical Formulation of the Geometric Knowledge Network](docs/mathematical_formulation.md)
-
----
-
-## ✨ Key differentiators
-
-What makes this repository different from a typical lightweight RAG demo:
-
-- **Graph-enhanced retrieval rather than vector-only retrieval**
-- **Document-grounded typed entities** such as requirements, controls, evidence, and incidents
-- **Hybrid candidate expansion** through graph neighbors
-- **Evaluation-first design** with benchmark queries and comparison utilities
-- **Inspectable local artifacts** for results, reports, graph summaries, and figures
-- **Modular package architecture** with notebooks used mainly for orchestration
-
----
-
-## 🏗️ Architecture
-
-```text
-Raw Documents
-   |
-   v
-Chunking
-   |
-   v
-Vector Index -------------------------------> Baseline Retrieval
-   |
-   v
-Typed Heuristic Extraction
-   |
-   v
-Geometric Knowledge Network
-(Document / Chunk / Requirement / Control / Evidence / Incident / Concept)
-   |
-   v
-Hybrid Retrieval
-(Vector Hits + Graph Expansion + Re-ranking)
-   |
-   v
-Evaluation + Reports + Figures + Saved Artifacts
+Chunk A → Requirement → Control C-101 → Chunk B
 ```
 
 ---
 
-## 🧪 Why the sample docs are synthetic
+## 🎯 Use cases
 
-For the first demo, the repository uses a small synthetic-but-realistic corpus rather than a public benchmark-only dataset.
+The framework is built around concrete use cases rather than a generic "world graph":
 
-This choice is intentional.
-
-Many public RAG datasets are optimized for answer correctness or retrieval relevance, but they do not always expose the kinds of relationships that make graph augmentation useful. The included documents were designed to create:
-
-- cross-document references
-- requirement-control linkages
-- evidence-bearing statements
-- monitoring and drift relationships
-- incident escalation patterns
-- multi-hop retrieval opportunities
-
-That makes the repository better suited for demonstrating the value of GKN-enhanced retrieval.
+| Use case | Example question | Where graph structure helps |
+|---|---|---|
+| **AI governance / model risk** (flagship) | *What does the policy require for validation evidence?* | requirement ↔ control ↔ evidence mapping, traceable support paths |
+| **HotpotQA multi-hop QA** (benchmark) | *Which film directed by X is a horror film?* | bridging across articles via shared entities |
+| Evidence traceability | *Which source supports this conclusion?* | document → chunk → requirement → answer path |
+| Hallucination / support checking | *Is this statement supported by the corpus?* | compare claims to evidence nodes and citation paths |
+| Agent-trace evaluation *(planned)* | *Did the agent use the correct tool sequence?* | execution represented as a graph trajectory |
 
 ---
 
@@ -253,223 +182,135 @@ geometric_knowledge_network/
   LICENSE
   requirements.txt
   data/
-    sample_docs/
-    eval_queries.json
+    sample_docs/            # synthetic governance corpus
+    eval_queries.json       # governance benchmark queries
+    hotpot_train_v1.1.json  # HotpotQA (downloaded on demand; git-ignored)
   notebooks/
-    99_end_to_end_demo.ipynb
+    99_end_to_end_demo.ipynb                   # governance demo
+    11_hotpotqa_knowledge_network_demo.ipynb   # HotpotQA demo (fair benchmark)
+    10_hotpotqa_gkn_benchmark.ipynb            # compact HotpotQA benchmark
   src/geometric_knowledge_network/
-    __init__.py
-    config.py
-    schema.py
-    ingest.py
-    extraction.py
-    vector_store.py
-    graph_builder.py
-    hybrid_retriever.py
-    evaluation.py
-    visualization.py
-    reporting.py
+    config.py               # env-driven configuration
+    schema.py               # node/edge type enums
+    ingest.py               # parsing + chunking
+    extraction.py           # governance heuristic extraction
+    vector_store.py         # TF-IDF baseline + embedding store (FAISS, cached)
+    graph_builder.py        # governance knowledge network
+    hotpotqa_loader.py      # HotpotQA load + auto-download/cache
+    hotpotqa_graph.py       # HotpotQA graph (corpus-only, leakage-free)
+    hotpotqa_relevance.py   # supporting-title relevance (eval only)
+    hotpotqa_benchmark.py   # baseline vs hybrid runner
+    hybrid_retriever.py     # vector + graph expansion + re-ranking
+    path_explainer.py       # graph path explanations
+    evaluation.py           # hit-rate / recall@k / precision@k / MRR
+    visualization.py, reporting.py
   tests/
-    test_smoke.py
+    test_smoke.py           # governance pipeline
+    test_hotpotqa.py        # HotpotQA pipeline + leakage guard
 ```
-
----
-
-## 🧩 Current implementation
-
-The current implementation follows a deliberately pragmatic architecture.
-
-### Implementation approach
-
-- **Local-first**: no enterprise infrastructure required for the MVP
-- **Modular**: notebooks are orchestration layers; implementation lives in `src/`
-- **Document-grounded**: graph nodes and edges remain tied to source text
-- **Evaluation-first**: the repository is built to compare baseline and hybrid retrieval
-- **Inspectable**: outputs, graph summaries, and reports are saved locally
-- **Incremental**: start with lightweight typed heuristics before adding heavier extraction methods
-
-### Current MVP capabilities
-
-The repository currently includes:
-
-- sample governance / validation / control documents in `data/sample_docs/`
-- document ingestion and chunking
-- a baseline vector retriever
-- heuristic typed extraction for:
-  - requirements
-  - controls
-  - evidence
-  - incidents
-  - generic concepts
-- a lightweight NetworkX-based knowledge network
-- hybrid retrieval with graph-aware candidate expansion
-- a benchmark query set in `data/eval_queries.json`
-- a demo notebook for baseline vs hybrid exploration
-- local artifact saving support for results, reports, figures, and graph summaries
 
 ---
 
 ## 🚀 Quick start
 
-### 1. Create and activate a virtual environment
-
-```powershell
+```bash
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### 2. Launch Jupyter
+Create a `.env` for the HotpotQA / embedding settings (all optional; sensible defaults apply):
 
-```powershell
+```ini
+# Embeddings: "local" (sentence-transformers), "small", or "large" (OpenAI/Azure)
+EMBEDDING_CHOICE=local
+# OPENAI_API_KEY=...                # only for cloud embeddings
+# OPENAI_BASE_URL=...               # optional (Azure / gateway)
+HOTPOTQA_SAMPLE_SIZE=25
+HOTPOTQA_RANDOM_SEED=42
+FORCE_REBUILD_VECTOR_STORE=false
+```
+
+Then launch Jupyter and open a demo:
+
+```bash
 jupyter notebook
 ```
 
-### 3. Run the demo notebook
+- **Governance demo:** `notebooks/99_end_to_end_demo.ipynb`
+- **HotpotQA demo:** `notebooks/11_hotpotqa_knowledge_network_demo.ipynb`
 
-Open:
+The notebooks are intentionally code-light; implementation lives in `src/`.
 
-- `notebooks/99_end_to_end_demo.ipynb`
+**Run the tests** (dependency-light — they use the TF-IDF path, so no faiss/openai/dataset needed):
 
-The notebook is intentionally code-light and delegates implementation to the Python package in `src/`.
-
----
-
-## 📓 Demo workflow and outputs
-
-### What the demo notebook shows
-
-The notebook walks through:
-
-1. loading the sample corpus
-2. chunking the documents
-3. building a baseline vector index
-4. building the knowledge network
-5. running baseline retrieval
-6. running graph-enhanced hybrid retrieval
-7. comparing retrieved chunks
-8. visualizing a local graph neighborhood
-9. evaluating over a small benchmark query set
-10. saving results and reports locally
-
-### Saved artifacts
-
-The repository is designed to save outputs locally so results are inspectable and reproducible.
-
-Typical artifact folders include:
-
-- `artifacts/results/`
-- `artifacts/reports/`
-- `artifacts/figures/`
-- `artifacts/graph/`
-
-These can contain:
-
-- retrieval result snapshots
-- evaluation summaries
-- graph summaries
-- exported figures
-- comparison tables
+```bash
+PYTHONPATH=src python -m pytest tests/        # requires: pip install pytest
+```
 
 ---
 
-## ⚠️ Current limitations and roadmap
+## 🧪 The HotpotQA benchmark (and a note on fairness)
 
-This is an MVP and not yet a production system.
+[HotpotQA](https://hotpotqa.github.io/) is a multi-hop QA dataset where answering requires bridging across multiple articles — a natural fit for testing graph-augmented retrieval.
 
-### Current limitations
+**Automatic data handling.** The dataset is **downloaded and cached on first use** (default `data/hotpot_train_v1.1.json`, ~570 MB, git-ignored). The loader tries the official CMU mirror first and **falls back to the Hugging Face mirror** automatically if CMU is unreachable, converting it to the canonical HotpotQA schema. Subsequent runs load the local copy directly.
 
-- heuristic extraction rather than high-accuracy structured extraction
-- TF-IDF baseline retrieval rather than stronger embedding models
-- lightweight graph semantics rather than deeply curated ontology design
-- limited answer synthesis and citation validation
-- small synthetic evaluation set
-- no public benchmark adapter yet
+**Leakage-free comparison.** The retrieval graph is built from **observable corpus text only**. The gold supporting facts are used *exclusively* to define evaluation relevance — they are **never** encoded into the graph the retriever uses. (An earlier version added `SupportingFact` nodes / `SUPPORTS` edges from the gold labels and rewarded the retriever for landing near them, which leaks the answer key.) As a result the baseline-vs-hybrid numbers are honest, and the hybrid retriever must *earn* any gain rather than inherit it from leaked labels. Expect the hybrid to sometimes **tie or trail** the baseline today; that is the signal that drives the next round of graph-scoring improvements.
 
-> These limitations are intentional for the current phase: the focus is to validate whether a lightweight knowledge network can produce measurable value over vector-only retrieval.
+---
 
-### Near-term improvements
+## ⚠️ Current status and roadmap
 
-- stronger chunking strategy
-- richer typed schema and edge semantics
-- improved graph expansion and re-ranking
+This is an MVP focused on a single question: **does a lightweight knowledge network measurably improve retrieval, traceability, and evaluation over vector-only RAG?**
+
+**Current limitations**
+- heuristic extraction (not yet LLM-assisted with provenance/confidence)
+- title-level (not sentence-level) HotpotQA relevance
+- graph scoring is simple; expansion does not yet reliably beat the baseline
+- no constraint layer, agent-trace layer, or answer synthesis / citation validation yet
+
+**Near-term**
+- generalize into a reusable **GKN core** + thin **use-case adapters** (HotpotQA, governance, …)
+- sentence-level relevance + more query-aware graph scoring
+- LLM-assisted extraction with `source_chunk_id` + confidence + prompt-version provenance
 - cleaner evaluation reports and artifact export
-- robust notebook rendering and GitHub presentation
 
-### Longer-term options
-
-- local embedding model upgrades
-- LLM-assisted extraction with provenance and confidence
-- temporal graph support
-- graph embeddings / knowledge graph embeddings
-- Neo4j migration for queryability and visualization
-- public benchmark adapters
+**Longer-term options** *(only if the lightweight graph proves its value first)*
+- Neo4j migration (Cypher, visualization, scale)
+- graph / knowledge-graph embeddings; non-Euclidean (hyperbolic) embeddings for hierarchy
+- temporal and causal graph layers
+- graph neural networks; interactive Streamlit/Gradio review UI; CI/CD evaluation
 
 ---
 
 ## 🧠 Conceptual grounding
 
-This repository is inspired by a practical interpretation of several overlapping ideas:
-
-- **GraphRAG**: graphs can improve retrieval and summarization over private corpora when questions require more than local similarity
-- **Knowledge graph embeddings**: relations can be treated as structured geometric operations, not just text labels
-- **Geometric deep learning**: structured and non-Euclidean representations matter when data has relational topology
-- **Geometry discovery**: useful learning systems often discover structure, similarity, transformation, and path rather than only optimize raw matching
-
-This repo takes those ideas and applies them in a pragmatic local MVP for document-grounded RAG.
+- **GraphRAG** — graphs improve retrieval/summarization over private corpora when questions need more than local similarity
+- **Knowledge graph embeddings** — relations as geometric operations, not just text labels
+- **Geometric deep learning** — structured / non-Euclidean representations matter when data has relational topology
+- **Geometry discovery** (Agus Sudjianto) — learning systems succeed by discovering structure, similarity, direction, and path, not only by raw matching
 
 ---
 
-## 📖 References and related resources
+## 📖 References
 
-### Core conceptual and practical references
-
-- Agus Sudjianto, *Learning as Geometry Discovery* (2026)  
-  https://agussudjianto.substack.com/p/learning-as-geometry-discovery
-
-- Agus Sudjianto, *What Learning Is Geometry Discovery Actually Means* (2026)  
-  https://agussudjianto.substack.com/p/what-learning-is-geometry-discovery
-
-- Microsoft Research, *GraphRAG: Unlocking LLM discovery on narrative private data* (2024)  
-  https://www.microsoft.com/en-us/research/project/graphrag/
-
-- Darren Edge et al., *A Graph RAG Approach to Query-Focused Summarization* (2024)  
-  https://arxiv.org/abs/2404.16130
-
-- Microsoft GraphRAG documentation  
-  https://microsoft.github.io/graphrag/
-
-- Neo4j, *LLM Knowledge Graph Builder*  
-  https://neo4j.com/labs/genai-ecosystem/llm-graph-builder/
-
-- Neo4j, *Generative AI - Ground LLMs with Knowledge Graphs*  
-  https://neo4j.com/generativeai/
-
-### Knowledge graph geometry and embeddings
-
-- Chengjin Xu et al., *Knowledge Graph Embeddings in Geometric Algebras* (COLING 2020)  
-  https://aclanthology.org/2020.coling-main.46/
-
-- ACM Computing Surveys, *Knowledge Graph Embedding: A Survey from the Perspective of Representation Spaces*  
-  https://dl.acm.org/doi/10.1145/3643806
-
-- Yuhan Liu et al., *Unifying Geometry Knowledge Graph Embedding with Optimal Transport* (TheWebConf 2024)  
-  https://openreview.net/forum?id=v9H7e0ShNN
-
-### Broader theoretical background
-
-- Michael M. Bronstein et al., *Geometric deep learning: going beyond Euclidean data* (2016)  
-  https://arxiv.org/abs/1611.08097
-
-### Ongoing literature tracking
-
-- `zjukg/KG-LLM-Papers` repository  
-  https://github.com/zjukg/KG-LLM-Papers
+- Agus Sudjianto, *Learning as Geometry Discovery* (2026) — https://agussudjianto.substack.com/p/learning-as-geometry-discovery
+- Agus Sudjianto, *What Learning Is Geometry Discovery Actually Means* (2026) — https://agussudjianto.substack.com/p/what-learning-is-geometry-discovery
+- Microsoft Research, *GraphRAG* (2024) — https://www.microsoft.com/en-us/research/project/graphrag/
+- Darren Edge et al., *A Graph RAG Approach to Query-Focused Summarization* (2024) — https://arxiv.org/abs/2404.16130
+- Neo4j, *LLM Knowledge Graph Builder* — https://neo4j.com/labs/genai-ecosystem/llm-graph-builder/
+- Chengjin Xu et al., *Knowledge Graph Embeddings in Geometric Algebras* (COLING 2020) — https://aclanthology.org/2020.coling-main.46/
+- ACM Computing Surveys, *Knowledge Graph Embedding: A Survey from the Perspective of Representation Spaces* — https://dl.acm.org/doi/10.1145/3643806
+- Yuhan Liu et al., *Unifying Geometry KG Embedding with Optimal Transport* (TheWebConf 2024) — https://openreview.net/forum?id=v9H7e0ShNN
+- Michael M. Bronstein et al., *Geometric deep learning: going beyond Euclidean data* (2016) — https://arxiv.org/abs/1611.08097
+- HotpotQA — https://hotpotqa.github.io/
+- `zjukg/KG-LLM-Papers` — https://github.com/zjukg/KG-LLM-Papers
 
 ---
 
-## 📄 License and status
+## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT — see [LICENSE](LICENSE).
 
-> **Current status:** early-stage local MVP focused on building a credible and inspectable comparison between baseline vector retrieval and GKN-enhanced retrieval.
+> **Status:** early-stage local research MVP. The plan and schema here are initial and will be updated, enhanced, and adjusted as research progresses.

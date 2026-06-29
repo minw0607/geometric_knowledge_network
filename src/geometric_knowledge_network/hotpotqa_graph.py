@@ -8,7 +8,6 @@ from typing import Dict, List, Set
 import networkx as nx
 
 from .graph_config import GraphRetrievalConfig
-from .hotpotqa_loader import HotpotQASample
 from .ingest import Chunk, Document
 
 
@@ -95,12 +94,20 @@ class HotpotGraphBuilder:
         self.extractor = extractor
         self.config = config or GraphRetrievalConfig()
 
-    def build(self, documents: List[Document], chunks: List[Chunk], samples: List[HotpotQASample]) -> nx.Graph:
+    def build(self, documents: List[Document], chunks: List[Chunk]) -> nx.Graph:
+        """Build the retrieval graph from observable corpus text only.
+
+        IMPORTANT (benchmark fairness): the graph is constructed *exclusively*
+        from documents, chunks, and entities extracted from chunk text. Gold
+        HotpotQA supporting facts are deliberately NOT encoded here, because the
+        evaluation defines relevance from those same supporting facts. Baking
+        them into the retrieval graph would leak the answer key into the
+        retriever and inflate the hybrid results. Supporting facts are used only
+        downstream, for scoring (see HotpotRelevanceMapper).
+        """
         graph = nx.Graph()
         doc_map = {doc.doc_id: doc for doc in documents}
-        title_to_support_nodes: Dict[str, Set[str]] = defaultdict(set)
         entity_to_chunks: Dict[str, Set[str]] = defaultdict(set)
-        question_entity_hints = self._question_entity_hints(samples)
 
         for doc in documents:
             graph.add_node(
@@ -117,17 +124,6 @@ class HotpotGraphBuilder:
                 confidence=1.0,
             )
             graph.add_edge(doc.doc_id, title_entity_id, edge_type="HAS_TITLE", weight=self.config.contains_weight)
-
-        for sample in samples:
-            for title, sent_id in sample.supporting_sent_ids:
-                support_node_id = f"support::{sample.question_id}::{self._normalize(title)}::{sent_id}"
-                graph.add_node(
-                    support_node_id,
-                    node_type="SupportingFact",
-                    label=f"{title}#{sent_id}",
-                    question_id=sample.question_id,
-                )
-                title_to_support_nodes[self._normalize(title)].add(support_node_id)
 
         for chunk in chunks:
             document = doc_map[chunk.doc_id]
@@ -155,10 +151,6 @@ class HotpotGraphBuilder:
                 if entity.node_type == "NamedEntity":
                     entity_to_chunks[entity.entity_id].add(chunk.chunk_id)
 
-            title_norm = self._normalize(document.title)
-            for support_node_id in title_to_support_nodes.get(title_norm, set()):
-                graph.add_edge(chunk.chunk_id, support_node_id, edge_type="SUPPORTS", weight=self.config.supports_weight)
-
         max_chunk_frequency = min(
             self.config.max_entity_chunk_frequency_absolute,
             max(2, int(len(chunks) * self.config.max_entity_document_frequency_ratio)),
@@ -175,13 +167,14 @@ class HotpotGraphBuilder:
             if len(entity_label.split()) < self.config.min_named_entity_tokens:
                 continue
 
+            # Corpus-only bridge edges: two chunks that share a distinctive named
+            # entity are linked. This is query-independent on purpose, so the
+            # same graph serves every question without being tuned to the eval set.
             chunk_list = sorted(chunk_ids)
             for i in range(len(chunk_list)):
                 for j in range(i + 1, len(chunk_list)):
                     left, right = chunk_list[i], chunk_list[j]
                     if graph.has_edge(left, right):
-                        continue
-                    if self.config.require_query_overlap_for_expansion and not self._entity_has_question_overlap(entity_label, question_entity_hints):
                         continue
                     graph.add_edge(
                         left,
@@ -192,19 +185,6 @@ class HotpotGraphBuilder:
                     )
 
         return graph
-
-    def _question_entity_hints(self, samples: List[HotpotQASample]) -> Set[str]:
-        hints: Set[str] = set()
-        for sample in samples:
-            for token in re.findall(r"[A-Za-z0-9\-]+", sample.question):
-                token_lower = token.lower()
-                if token_lower not in self.config.question_stopwords and len(token_lower) >= 4:
-                    hints.add(token_lower)
-        return hints
-
-    def _entity_has_question_overlap(self, entity_label: str, hints: Set[str]) -> bool:
-        entity_tokens = {token.lower() for token in re.findall(r"[A-Za-z0-9\-]+", entity_label)}
-        return bool(entity_tokens & hints)
 
     def _title_entity_id(self, title: str) -> str:
         return f"titleentity::{self._normalize(title)}"

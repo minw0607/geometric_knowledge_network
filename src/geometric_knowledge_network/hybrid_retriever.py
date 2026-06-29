@@ -8,7 +8,11 @@ import networkx as nx
 
 from .graph_config import GraphRetrievalConfig
 from .schema import NodeType
-from .vector_store import RetrievalResult, SimpleVectorStore
+from .vector_store import EmbeddingVectorStore, RetrievalResult, SimpleVectorStore
+
+# Any object exposing ``.search(query, top_k)`` and a ``.chunks`` list works as a
+# vector store for the hybrid retriever (TF-IDF baseline or embedding store).
+VectorStoreLike = EmbeddingVectorStore | SimpleVectorStore
 
 
 @dataclass
@@ -24,7 +28,7 @@ class HybridRetrievalResult:
 
 
 class HybridRetriever:
-    def __init__(self, vector_store: SimpleVectorStore, graph: nx.Graph, config: GraphRetrievalConfig | None = None) -> None:
+    def __init__(self, vector_store: VectorStoreLike, graph: nx.Graph, config: GraphRetrievalConfig | None = None) -> None:
         self.vector_store = vector_store
         self.graph = graph
         self.config = config or GraphRetrievalConfig()
@@ -99,8 +103,6 @@ class HybridRetriever:
                     edge_weight = sum(edge_weights) / max(1, len(edge_weights))
                     if any(term in " ".join(path_labels) for term in query_terms):
                         query_bonus += self.config.query_overlap_bonus
-                    if "SUPPORTS" in path_edge_types:
-                        query_bonus += 0.05
                     if "SHARES_ENTITY" in path_edge_types:
                         query_bonus -= 0.03
                 except nx.NetworkXNoPath:
@@ -129,7 +131,6 @@ class HybridRetriever:
                 NodeType.CONCEPT.value,
                 "TitleEntity",
                 "NamedEntity",
-                "SupportingFact",
             }:
                 node_label = str(self.graph.nodes[node_id].get("label") or self.graph.nodes[node_id].get("title") or "").lower()
                 node_weight = self.graph.nodes[node_id].get("confidence", 0.8)

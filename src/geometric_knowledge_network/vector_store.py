@@ -7,14 +7,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-import faiss
 import numpy as np
-from openai import AzureOpenAI, OpenAI
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from .config import GKNConfig
 from .ingest import Chunk
+
+# Heavy / optional dependencies are imported lazily so that the TF-IDF baseline
+# (SimpleVectorStore) and the graph/retrieval modules can be imported and used
+# without faiss, openai, or sentence-transformers installed.
+try:
+    import faiss
+except ImportError:
+    faiss = None
+
+try:
+    from openai import AzureOpenAI, OpenAI
+except ImportError:
+    AzureOpenAI = None
+    OpenAI = None
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -64,6 +76,11 @@ class SimpleVectorStore:
 
 class EmbeddingVectorStore:
     def __init__(self, config: GKNConfig) -> None:
+        if faiss is None:
+            raise ImportError(
+                "faiss is required for EmbeddingVectorStore. Install 'faiss-cpu', "
+                "or use SimpleVectorStore for a dependency-light TF-IDF baseline."
+            )
         self.config = config
         self.client = self._build_client() if config.embedding_choice != "local" else None
         self.local_model = self._build_local_model() if config.embedding_choice == "local" else None
@@ -148,6 +165,11 @@ class EmbeddingVectorStore:
         return embeddings / norms
 
     def _build_client(self):
+        if OpenAI is None or AzureOpenAI is None:
+            raise ImportError(
+                "openai is required for non-local embeddings. Install 'openai', "
+                "or set EMBEDDING_CHOICE=local to use a local sentence-transformer."
+            )
         extra_headers = {}
         if self.config.openai_apim_header_name and self.config.openai_apim_subscription_key:
             extra_headers[self.config.openai_apim_header_name] = self.config.openai_apim_subscription_key

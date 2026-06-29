@@ -7,3 +7,10 @@ artifacts/
 .vscode/
 .env
 *.env
+
+# Large datasets (downloaded on demand, cached locally)
+data/hotpot_*.json
+*.part
+
+# Vector-store / embedding caches
+checkpoints/
