@@ -77,8 +77,11 @@ class SimpleVectorStore:
 class EmbeddingVectorStore:
     def __init__(self, config: GKNConfig) -> None:
         self.config = config
-        self.client = self._build_client() if config.embedding_choice != "local" else None
-        self.local_model = self._build_local_model() if config.embedding_choice == "local" else None
+        # ``mode`` is the *effective* embedding mode; it starts from the configured
+        # choice but may fall back to "local" if cloud embeddings are unavailable.
+        self.mode = config.embedding_choice
+        self.client = None
+        self.local_model = None
         # Exact inner-product search on L2-normalized vectors == cosine similarity.
         # faiss is used when available; otherwise we fall back to a NumPy matmul,
         # which is exact and fast enough for the corpus sizes in this MVP.
@@ -86,22 +89,70 @@ class EmbeddingVectorStore:
         self.embeddings = None
         self.chunks: List[Chunk] = []
         self.embedding_dim = None
+
+        if self.mode != "local":
+            reason = self._cloud_unavailable_reason()
+            if reason is not None:
+                if config.embedding_fallback_to_local:
+                    print(f"[WARN] Cloud embeddings ('{self.mode}') unavailable: {reason}. "
+                          f"Falling back to local model '{config.local_embedding_model}'.")
+                    self.mode = "local"
+                else:
+                    raise ImportError(
+                        f"Cloud embeddings ('{self.mode}') unavailable: {reason}. "
+                        "Install/configure the cloud provider, set EMBEDDING_CHOICE=local, "
+                        "or leave EMBEDDING_FALLBACK_TO_LOCAL=true."
+                    )
+
+        if self.mode == "local":
+            self.local_model = self._build_local_model()
+        else:
+            self.client = self._build_client()
+
         if faiss is None:
             print("[INFO] faiss not installed; using NumPy exact-search fallback for the embedding index.")
+        print(f"[INFO] Embedding mode in effect: {self.mode} "
+              f"(model: {self._embedding_model_name()})")
+
+    def _cloud_unavailable_reason(self) -> str | None:
+        """Return a human reason if cloud embeddings can't be used, else None."""
+        if OpenAI is None or AzureOpenAI is None:
+            return "the 'openai' package is not installed"
+        if not self.config.openai_api_key:
+            return "OPENAI_API_KEY is not set"
+        return None
+
+    def _embedding_model_name(self) -> str:
+        return self.config.local_embedding_model if self.mode == "local" else self.config.openai_embedding_model
 
     def build(self, chunks: List[Chunk]) -> None:
+        self.chunks = chunks
         cache_path = self._cache_path(chunks)
         cached = self._load_cache(cache_path)
         if cached is not None and not self.config.force_rebuild_vector_store:
             print(f"[INFO] Loading cached vector store from {cache_path}")
-            self.chunks = chunks
             self._build_index(cached)
             return
 
         print(f"[INFO] Building new vector store and saving to {cache_path}")
-        self.chunks = chunks
         texts = [chunk.text for chunk in chunks]
-        embeddings = self._embed_texts(texts)
+        try:
+            embeddings = self._embed_texts(texts)
+        except Exception as exc:  # noqa: BLE001
+            if self.mode == "local" or not self.config.embedding_fallback_to_local:
+                raise
+            print(f"[WARN] Cloud embedding failed ({exc}). Falling back to local model "
+                  f"'{self.config.local_embedding_model}' and rebuilding.")
+            self.mode = "local"
+            self.local_model = self._build_local_model()
+            cache_path = self._cache_path(chunks)
+            cached = self._load_cache(cache_path)
+            if cached is not None and not self.config.force_rebuild_vector_store:
+                print(f"[INFO] Loading cached local vector store from {cache_path}")
+                self._build_index(cached)
+                return
+            embeddings = self._embed_texts(texts)
+
         normalized = self._normalize_embeddings(embeddings)
         self._build_index(normalized)
         self._save_cache(cache_path, normalized)
@@ -147,13 +198,13 @@ class EmbeddingVectorStore:
         return results
 
     def _embed_texts(self, texts: List[str]) -> np.ndarray:
-        if self.config.embedding_choice == "local":
+        if self.mode == "local":
             if self.local_model is None:
                 raise ValueError("Local embedding model is not available.")
             vectors = self.local_model.encode(texts, show_progress_bar=False)
             return np.array(vectors, dtype=np.float32)
 
-        batch_size = 16 if self.config.embedding_choice == "small" else 8
+        batch_size = 16 if self.mode == "small" else 8
         vectors: list[list[float]] = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
@@ -211,10 +262,10 @@ class EmbeddingVectorStore:
 
     def _cache_path(self, chunks: List[Chunk]) -> Path:
         self.config.checkpoints_dir.mkdir(parents=True, exist_ok=True)
-        model_name = self.config.openai_embedding_model if self.config.embedding_choice != "local" else self.config.local_embedding_model
+        model_name = self._embedding_model_name()
         signature_source = "|".join(
             [
-                self.config.embedding_choice,
+                self.mode,
                 model_name,
                 str(self.config.hotpotqa_sample_size),
                 str(self.config.hotpotqa_random_seed),
@@ -223,13 +274,13 @@ class EmbeddingVectorStore:
             ]
         )
         signature = hashlib.sha256(signature_source.encode("utf-8")).hexdigest()[:12]
-        return self.config.checkpoints_dir / f"hotpotqa_vs_{self.config.embedding_choice}_{self.config.hotpotqa_sample_size}_{self.config.hotpotqa_random_seed}_{signature}.pkl"
+        return self.config.checkpoints_dir / f"hotpotqa_vs_{self.mode}_{self.config.hotpotqa_sample_size}_{self.config.hotpotqa_random_seed}_{signature}.pkl"
 
     def _save_cache(self, path: Path, embeddings: np.ndarray) -> None:
         payload = {
             "embeddings": embeddings,
-            "embedding_choice": self.config.embedding_choice,
-            "embedding_model": self.config.openai_embedding_model if self.config.embedding_choice != "local" else self.config.local_embedding_model,
+            "embedding_choice": self.mode,
+            "embedding_model": self._embedding_model_name(),
             "shape": embeddings.shape,
         }
         with open(path, "wb") as f:
@@ -240,10 +291,9 @@ class EmbeddingVectorStore:
             return None
         with open(path, "rb") as f:
             payload = pickle.load(f)
-        model_name = self.config.openai_embedding_model if self.config.embedding_choice != "local" else self.config.local_embedding_model
-        if payload.get("embedding_choice") != self.config.embedding_choice:
+        if payload.get("embedding_choice") != self.mode:
             return None
-        if payload.get("embedding_model") != model_name:
+        if payload.get("embedding_model") != self._embedding_model_name():
             return None
         return payload.get("embeddings")
 

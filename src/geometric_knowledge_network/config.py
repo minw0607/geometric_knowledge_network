@@ -26,6 +26,7 @@ class GKNConfig:
     hotpotqa_random_seed: int = field(default_factory=lambda: int(os.getenv("HOTPOTQA_RANDOM_SEED", "42")))
     force_rebuild_vector_store: bool = field(default_factory=lambda: os.getenv("FORCE_REBUILD_VECTOR_STORE", "false").lower() == "true")
     embedding_choice: str = field(default_factory=lambda: os.getenv("EMBEDDING_CHOICE", "small").lower())
+    embedding_fallback_to_local: bool = field(default_factory=lambda: os.getenv("EMBEDDING_FALLBACK_TO_LOCAL", "true").lower() == "true")
     local_embedding_model: str = field(default_factory=lambda: os.getenv("LOCAL_EMBEDDING_MODEL", "all-mpnet-base-v2"))
     openai_base_url: str = field(default_factory=lambda: os.getenv("OPENAI_BASE_URL", ""))
     openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))

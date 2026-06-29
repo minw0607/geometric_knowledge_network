@@ -1,3 +1,6 @@
+# Core dependencies (cross-platform: macOS and Windows).
+# `pip install -r requirements.txt` installs everything needed to run the
+# notebooks end-to-end with local embeddings and the NumPy vector index.
 networkx>=3.3
 numpy>=1.26.0
 pandas>=2.2.0
@@ -7,7 +10,15 @@ jupyter>=1.0.0
 notebook>=7.0.0
 python-docx>=1.1.0
 pypdf>=4.2.0
-openai>=1.30.0
-faiss-cpu>=1.8.0
 python-dotenv>=1.0.1
-sentence-transformers>=3.0.1
+sentence-transformers>=3.0.1   # local embedding fallback
+
+# --- Optional accelerators / providers ---------------------------------------
+# The notebooks run WITHOUT these (graceful fallbacks are built in):
+#   - openai:    Azure / OpenAI-compatible cloud embeddings (preferred when set);
+#                without it, embeddings fall back to the local model above.
+#   - faiss-cpu: faster vector index; without it, an exact NumPy search is used.
+# Install when you want cloud embeddings and/or faiss acceleration:
+#   pip install "openai>=1.30.0" "faiss-cpu>=1.8.0"
+# (On some Python versions/platforms a faiss-cpu wheel may be unavailable — that
+#  is fine, the NumPy fallback covers it.)
