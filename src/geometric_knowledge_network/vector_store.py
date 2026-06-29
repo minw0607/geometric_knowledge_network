@@ -76,17 +76,18 @@ class SimpleVectorStore:
 
 class EmbeddingVectorStore:
     def __init__(self, config: GKNConfig) -> None:
-        if faiss is None:
-            raise ImportError(
-                "faiss is required for EmbeddingVectorStore. Install 'faiss-cpu', "
-                "or use SimpleVectorStore for a dependency-light TF-IDF baseline."
-            )
         self.config = config
         self.client = self._build_client() if config.embedding_choice != "local" else None
         self.local_model = self._build_local_model() if config.embedding_choice == "local" else None
+        # Exact inner-product search on L2-normalized vectors == cosine similarity.
+        # faiss is used when available; otherwise we fall back to a NumPy matmul,
+        # which is exact and fast enough for the corpus sizes in this MVP.
         self.index = None
+        self.embeddings = None
         self.chunks: List[Chunk] = []
         self.embedding_dim = None
+        if faiss is None:
+            print("[INFO] faiss not installed; using NumPy exact-search fallback for the embedding index.")
 
     def build(self, chunks: List[Chunk]) -> None:
         cache_path = self._cache_path(chunks)
@@ -94,9 +95,7 @@ class EmbeddingVectorStore:
         if cached is not None and not self.config.force_rebuild_vector_store:
             print(f"[INFO] Loading cached vector store from {cache_path}")
             self.chunks = chunks
-            self.embedding_dim = cached.shape[1]
-            self.index = faiss.IndexFlatIP(self.embedding_dim)
-            self.index.add(cached)
+            self._build_index(cached)
             return
 
         print(f"[INFO] Building new vector store and saving to {cache_path}")
@@ -104,21 +103,38 @@ class EmbeddingVectorStore:
         texts = [chunk.text for chunk in chunks]
         embeddings = self._embed_texts(texts)
         normalized = self._normalize_embeddings(embeddings)
-        self.embedding_dim = normalized.shape[1]
-        self.index = faiss.IndexFlatIP(self.embedding_dim)
-        self.index.add(normalized)
+        self._build_index(normalized)
         self._save_cache(cache_path, normalized)
 
+    def _build_index(self, normalized: np.ndarray) -> None:
+        normalized = np.ascontiguousarray(normalized, dtype=np.float32)
+        self.embeddings = normalized
+        self.embedding_dim = normalized.shape[1]
+        if faiss is not None:
+            self.index = faiss.IndexFlatIP(self.embedding_dim)
+            self.index.add(normalized)
+        else:
+            self.index = None
+
     def search(self, query: str, top_k: int = 3) -> List[RetrievalResult]:
-        if self.index is None:
+        if self.embeddings is None:
             raise ValueError("Embedding vector store has not been built.")
 
         query_embedding = self._embed_texts([query])
         query_embedding = self._normalize_embeddings(query_embedding)
-        scores, indices = self.index.search(query_embedding, top_k)
+
+        if self.index is not None:
+            scores, indices = self.index.search(query_embedding, top_k)
+            ranked = list(zip(scores[0], indices[0]))
+        else:
+            similarities = self.embeddings @ query_embedding[0]
+            top_indices = np.argsort(similarities)[::-1][:top_k]
+            ranked = [(float(similarities[idx]), int(idx)) for idx in top_indices]
 
         results: List[RetrievalResult] = []
-        for score, idx in zip(scores[0], indices[0]):
+        for score, idx in ranked:
+            if idx < 0:
+                continue
             chunk = self.chunks[idx]
             results.append(
                 RetrievalResult(

@@ -7,10 +7,16 @@ artifacts/
 .vscode/
 .env
 *.env
+.DS_Store
 
-# Large datasets (downloaded on demand, cached locally)
-data/hotpot_*.json
+# Large datasets (downloaded on demand, cached locally).
+# Pattern without a leading slash matches in any directory, so a misconfigured
+# HOTPOTQA_DATA_PATH can't accidentally commit the dataset somewhere else.
+hotpot_*.json
 *.part
+
+# Stray Windows-style absolute paths resolved as relative dirs
+[A-Z]:/
 
 # Vector-store / embedding caches
 checkpoints/
