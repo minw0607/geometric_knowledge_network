@@ -5,3 +5,5 @@ __pycache__/
 artifacts/
 .pytest_cache/
 .vscode/
+.env
+*.env

@@ -1,0 +1,6 @@
+Change Management Standard
+
+Any material model change requires impact assessment, updated validation, and refreshed approval evidence.
+Changes affecting monitoring thresholds must trigger control review and evidence update.
+Emergency changes must be documented and reviewed after implementation.
+When a change increases drift risk, enhanced monitoring and validation review are required.

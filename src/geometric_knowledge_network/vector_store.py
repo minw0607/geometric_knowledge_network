@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+import hashlib
+import pickle
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List
 
+import faiss
 import numpy as np
+from openai import AzureOpenAI, OpenAI
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+from .config import GKNConfig
 from .ingest import Chunk
+
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None
 
 
 @dataclass
@@ -48,3 +60,155 @@ class SimpleVectorStore:
                 )
             )
         return results
+
+
+class EmbeddingVectorStore:
+    def __init__(self, config: GKNConfig) -> None:
+        self.config = config
+        self.client = self._build_client() if config.embedding_choice != "local" else None
+        self.local_model = self._build_local_model() if config.embedding_choice == "local" else None
+        self.index = None
+        self.chunks: List[Chunk] = []
+        self.embedding_dim = None
+
+    def build(self, chunks: List[Chunk]) -> None:
+        cache_path = self._cache_path(chunks)
+        cached = self._load_cache(cache_path)
+        if cached is not None and not self.config.force_rebuild_vector_store:
+            print(f"[INFO] Loading cached vector store from {cache_path}")
+            self.chunks = chunks
+            self.embedding_dim = cached.shape[1]
+            self.index = faiss.IndexFlatIP(self.embedding_dim)
+            self.index.add(cached)
+            return
+
+        print(f"[INFO] Building new vector store and saving to {cache_path}")
+        self.chunks = chunks
+        texts = [chunk.text for chunk in chunks]
+        embeddings = self._embed_texts(texts)
+        normalized = self._normalize_embeddings(embeddings)
+        self.embedding_dim = normalized.shape[1]
+        self.index = faiss.IndexFlatIP(self.embedding_dim)
+        self.index.add(normalized)
+        self._save_cache(cache_path, normalized)
+
+    def search(self, query: str, top_k: int = 3) -> List[RetrievalResult]:
+        if self.index is None:
+            raise ValueError("Embedding vector store has not been built.")
+
+        query_embedding = self._embed_texts([query])
+        query_embedding = self._normalize_embeddings(query_embedding)
+        scores, indices = self.index.search(query_embedding, top_k)
+
+        results: List[RetrievalResult] = []
+        for score, idx in zip(scores[0], indices[0]):
+            chunk = self.chunks[idx]
+            results.append(
+                RetrievalResult(
+                    chunk_id=chunk.chunk_id,
+                    doc_id=chunk.doc_id,
+                    text=chunk.text,
+                    score=float(score),
+                )
+            )
+        return results
+
+    def _embed_texts(self, texts: List[str]) -> np.ndarray:
+        if self.config.embedding_choice == "local":
+            if self.local_model is None:
+                raise ValueError("Local embedding model is not available.")
+            vectors = self.local_model.encode(texts, show_progress_bar=False)
+            return np.array(vectors, dtype=np.float32)
+
+        batch_size = 16 if self.config.embedding_choice == "small" else 8
+        vectors: list[list[float]] = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            for attempt in range(5):
+                try:
+                    response = self.client.embeddings.create(
+                        model=self.config.openai_embedding_model,
+                        input=batch,
+                    )
+                    vectors.extend(item.embedding for item in response.data)
+                    break
+                except Exception as exc:
+                    error_text = str(exc)
+                    if "429" in error_text or "RateLimit" in error_text or "RateLimitReached" in error_text:
+                        wait_seconds = 60 * (attempt + 1)
+                        print(f"[WARN] Embedding rate limit hit. Waiting {wait_seconds} seconds before retrying...")
+                        time.sleep(wait_seconds)
+                        continue
+                    raise
+        return np.array(vectors, dtype=np.float32)
+
+    def _normalize_embeddings(self, embeddings: np.ndarray) -> np.ndarray:
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        return embeddings / norms
+
+    def _build_client(self):
+        extra_headers = {}
+        if self.config.openai_apim_header_name and self.config.openai_apim_subscription_key:
+            extra_headers[self.config.openai_apim_header_name] = self.config.openai_apim_subscription_key
+
+        if self.config.openai_api_version:
+            return AzureOpenAI(
+                api_key=self.config.openai_api_key,
+                azure_endpoint=self.config.openai_base_url,
+                api_version=self.config.openai_api_version,
+                default_headers=extra_headers or None,
+            )
+
+        return OpenAI(
+            api_key=self.config.openai_api_key,
+            base_url=self.config.openai_base_url or None,
+            default_headers=extra_headers or None,
+        )
+
+    def _build_local_model(self):
+        if SentenceTransformer is None:
+            raise ImportError("sentence-transformers is required for local embeddings.")
+        return SentenceTransformer(self.config.local_embedding_model)
+
+    def _cache_path(self, chunks: List[Chunk]) -> Path:
+        self.config.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        model_name = self.config.openai_embedding_model if self.config.embedding_choice != "local" else self.config.local_embedding_model
+        signature_source = "|".join(
+            [
+                self.config.embedding_choice,
+                model_name,
+                str(self.config.hotpotqa_sample_size),
+                str(self.config.hotpotqa_random_seed),
+                str(len(chunks)),
+                self._chunk_signature(chunks),
+            ]
+        )
+        signature = hashlib.sha256(signature_source.encode("utf-8")).hexdigest()[:12]
+        return self.config.checkpoints_dir / f"hotpotqa_vs_{self.config.embedding_choice}_{self.config.hotpotqa_sample_size}_{self.config.hotpotqa_random_seed}_{signature}.pkl"
+
+    def _save_cache(self, path: Path, embeddings: np.ndarray) -> None:
+        payload = {
+            "embeddings": embeddings,
+            "embedding_choice": self.config.embedding_choice,
+            "embedding_model": self.config.openai_embedding_model if self.config.embedding_choice != "local" else self.config.local_embedding_model,
+            "shape": embeddings.shape,
+        }
+        with open(path, "wb") as f:
+            pickle.dump(payload, f)
+
+    def _load_cache(self, path: Path):
+        if not path.exists():
+            return None
+        with open(path, "rb") as f:
+            payload = pickle.load(f)
+        model_name = self.config.openai_embedding_model if self.config.embedding_choice != "local" else self.config.local_embedding_model
+        if payload.get("embedding_choice") != self.config.embedding_choice:
+            return None
+        if payload.get("embedding_model") != model_name:
+            return None
+        return payload.get("embeddings")
+
+    def _chunk_signature(self, chunks: List[Chunk]) -> str:
+        joined = "|".join(chunk.chunk_id + ":" + chunk.doc_id + ":" + chunk.text[:100] for chunk in chunks)
+        return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:12]

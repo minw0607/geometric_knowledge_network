@@ -7,3 +7,7 @@ jupyter>=1.0.0
 notebook>=7.0.0
 python-docx>=1.1.0
 pypdf>=4.2.0
+openai>=1.30.0
+faiss-cpu>=1.8.0
+python-dotenv>=1.0.1
+sentence-transformers>=3.0.1

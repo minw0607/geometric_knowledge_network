@@ -35,6 +35,7 @@ class KnowledgeNetworkBuilder:
                 chunk.doc_id,
                 chunk.chunk_id,
                 edge_type=EdgeType.CONTAINS.value,
+                weight=1.0,
             )
 
             entities = self.extractor.extract_entities(chunk)
@@ -50,20 +51,25 @@ class KnowledgeNetworkBuilder:
                     chunk.chunk_id,
                     entity.entity_id,
                     edge_type=EdgeType.MENTIONS.value,
+                    weight=self._mention_weight(entity),
                 )
 
             for left, right in combinations(entities, 2):
+                edge_type = self._infer_edge_type(left, right)
+                if edge_type is None:
+                    continue
                 if graph.has_edge(left.entity_id, right.entity_id):
                     continue
                 graph.add_edge(
                     left.entity_id,
                     right.entity_id,
-                    edge_type=self._infer_edge_type(left, right),
+                    edge_type=edge_type,
+                    weight=self._edge_weight(edge_type),
                 )
 
         return graph
 
-    def _infer_edge_type(self, left: ExtractedEntity, right: ExtractedEntity) -> str:
+    def _infer_edge_type(self, left: ExtractedEntity, right: ExtractedEntity) -> str | None:
         pair = {left.node_type, right.node_type}
 
         if NodeType.REQUIREMENT.value in pair and NodeType.CONTROL.value in pair:
@@ -72,4 +78,36 @@ class KnowledgeNetworkBuilder:
             return EdgeType.SUPPORTS.value
         if NodeType.INCIDENT.value in pair and NodeType.CONTROL.value in pair:
             return EdgeType.TRIGGERS.value
-        return EdgeType.RELATED_TO.value
+        if pair == {NodeType.CONTROL.value, NodeType.EVIDENCE.value}:
+            return EdgeType.SUPPORTS.value
+        if pair == {NodeType.REQUIREMENT.value, NodeType.EVIDENCE.value}:
+            return EdgeType.SUPPORTS.value
+        if pair == {NodeType.CONCEPT.value, NodeType.REQUIREMENT.value} and self._shared_signal(left, right):
+            return EdgeType.RELATED_TO.value
+        if pair == {NodeType.CONCEPT.value, NodeType.CONTROL.value} and self._shared_signal(left, right):
+            return EdgeType.RELATED_TO.value
+        return None
+
+    def _shared_signal(self, left: ExtractedEntity, right: ExtractedEntity) -> bool:
+        left_tokens = set(left.label.lower().split())
+        right_tokens = set(right.label.lower().split())
+        return bool(left_tokens & right_tokens) or left.confidence >= 0.85 or right.confidence >= 0.85
+
+    def _mention_weight(self, entity: ExtractedEntity) -> float:
+        base = {
+            NodeType.REQUIREMENT.value: 1.0,
+            NodeType.CONTROL.value: 1.0,
+            NodeType.EVIDENCE.value: 0.95,
+            NodeType.INCIDENT.value: 0.95,
+            NodeType.CONCEPT.value: 0.65,
+        }
+        return base.get(entity.node_type, 0.75)
+
+    def _edge_weight(self, edge_type: str) -> float:
+        weights = {
+            EdgeType.REQUIRES.value: 1.0,
+            EdgeType.SUPPORTS.value: 0.95,
+            EdgeType.TRIGGERS.value: 0.9,
+            EdgeType.RELATED_TO.value: 0.45,
+        }
+        return weights.get(edge_type, 0.5)

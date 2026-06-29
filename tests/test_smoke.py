@@ -13,10 +13,10 @@ def test_smoke_pipeline():
     config = GKNConfig()
     ingestor = DocumentIngestor()
     docs = ingestor.load_text_documents(Path("data/sample_docs"))
-    assert docs
+    assert len(docs) >= 10
 
     chunks = ingestor.chunk_documents(docs, chunk_size=config.chunk_size, chunk_overlap=config.chunk_overlap)
-    assert chunks
+    assert len(chunks) >= len(docs)
 
     vector_store = SimpleVectorStore()
     vector_store.build(chunks)
@@ -36,6 +36,6 @@ def test_smoke_pipeline():
     assert hybrid_results
 
     test_cases = load_query_test_cases(Path("data/eval_queries.json"))
-    assert test_cases
+    assert len(test_cases) >= 8
     metrics = evaluate_retrieval(hybrid_results, test_cases[0].relevant_chunk_ids)
     assert "mrr" in metrics

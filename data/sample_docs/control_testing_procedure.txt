@@ -1,0 +1,5 @@
+Control Testing Procedure
+
+Testing of governance controls must include scope definition, evidence collection, and result documentation.
+If a tested control fails, the issue must be linked to the affected requirement and escalated where necessary.
+Testing evidence must identify the control owner, test date, and remediation status.

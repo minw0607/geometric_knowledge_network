@@ -1,0 +1,5 @@
+Model Risk Taxonomy
+
+Model risk includes performance risk, data risk, drift risk, governance risk, and operational risk.
+High-risk systems require stronger validation evidence, enhanced monitoring, and more frequent review.
+If governance risk is elevated, approval should consider compensating controls and issue history.

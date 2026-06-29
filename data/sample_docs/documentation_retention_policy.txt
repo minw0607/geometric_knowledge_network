@@ -1,0 +1,5 @@
+Documentation Retention Policy
+
+Validation evidence, approval records, incident reviews, and control assessments must be retained according to retention requirements.
+If evidence is deleted or missing, the system owner must notify governance and reconstruct the record where possible.
+Retention exceptions must be approved and documented with supporting rationale.

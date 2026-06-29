@@ -1,0 +1,5 @@
+Validation Evidence Checklist
+
+Validation approval requires documented testing evidence, monitoring readiness evidence, and documented limitations.
+Evidence packages must include test cases, threshold results, failure scenarios, and reviewer sign-off.
+If enhanced monitoring is required, the evidence package must identify the supporting control and monitoring owner.

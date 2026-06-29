@@ -1,0 +1,5 @@
+Risk Acceptance Procedure
+
+If a control gap cannot be remediated before approval, the risk owner must submit a risk acceptance request.
+The request must include supporting evidence, issue severity, compensating controls, and approval rationale.
+Any accepted risk must be reviewed periodically and re-evaluated after material incidents or model changes.

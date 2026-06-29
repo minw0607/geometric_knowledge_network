@@ -1,0 +1,5 @@
+Model Development Standard
+
+Model developers must document design assumptions, data sources, training limitations, and intended use.
+Before validation begins, the development team must provide supporting documentation and testing artifacts.
+If known limitations affect monitoring expectations, those limitations must be provided to the validation team.

@@ -1,0 +1,6 @@
+Model Monitoring Standard
+
+All production AI systems must implement ongoing monitoring for performance, drift, stability, and harmful outputs.
+Monitoring evidence must include threshold definitions, escalation rules, and review ownership.
+When material drift is detected, the monitoring owner must notify the incident manager and validation lead.
+Monitoring controls must be reviewed at least annually and after any material model change.

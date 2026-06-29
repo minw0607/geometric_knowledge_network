@@ -1,0 +1,5 @@
+Issue Remediation Guideline
+
+All material findings and control gaps must have a remediation plan, owner, and target date.
+Remediation evidence must show that the issue was addressed and that the related control is operating effectively.
+If remediation is delayed, the issue must be escalated and reviewed by governance leadership.

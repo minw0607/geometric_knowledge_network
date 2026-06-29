@@ -1,0 +1,5 @@
+Audit Findings Memo
+
+Audit finding F-12 noted that annual review evidence was incomplete for one production AI system.
+The finding requires remediation, updated control documentation, and management approval.
+If the supporting evidence is missing, the related control must be re-assessed and the issue escalated.

@@ -1,0 +1,5 @@
+Regulatory Guidance Summary
+
+Institutions should maintain evidence that model validation is independent, documented, and risk-based.
+Governance should ensure that monitoring, issue management, and control oversight are proportionate to model risk.
+Where material issues are identified, remediation and escalation should be documented and reviewed.

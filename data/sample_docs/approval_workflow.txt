@@ -1,0 +1,6 @@
+Approval Workflow
+
+Production approval requires validation completion, evidence review, and control confirmation.
+The approval committee must confirm that required controls are implemented before go-live.
+If material risk remains unresolved, approval must be escalated to the risk committee.
+Any approval decision must cite the supporting validation evidence and control status.
