@@ -154,6 +154,42 @@ Chunk A → Requirement → Control C-101 → Chunk B
 
 📐 Full treatment (graph construction, structural closeness, worked examples): [docs/mathematical_formulation.md](docs/mathematical_formulation.md)
 
+### Where the knowledge network actually helps
+
+Dense embeddings are a *static* map of tokens to vectors compared by cosine — strong on the **first hop** (chunks close to the query) but weak on the **second "bridge" hop**: a supporting document reachable only through a shared entity and often semantically distant from the query. So the headline metric is not raw similarity but **multi-hop document coverage** — `doc_recall` and `all_docs_hit` (did we recover *every* supporting document, including the bridge?).
+
+### Scoring: from ad-hoc bonus to Personalized PageRank
+
+The first prototype added a query-agnostic structural bonus `b(c)` to every candidate; on a fair (leakage-free) HotpotQA run this reshuffled strong hits and *hurt* MRR without improving coverage. The current scorer replaces it with a principled diffusion:
+
+1. **Add-not-demote.** Dense top hits keep their ranks (MRR preserved). The graph can only *add* bridge documents the vector search missed.
+2. **Personalized PageRank (random walk with restart).** Seed a personalization vector on the hop-1 chunks plus the query-matching entities adjacent to them, then propagate over a localized subgraph:
+
+   ```text
+   r = α · W · r + (1 − α) · p          ( p = query-seeded restart distribution )
+   ```
+
+   The highest-scoring chunks from *new* documents fill a small bridge budget. This is the agentic multi-hop step (retrieve → seed → diffuse → add).
+
+### Advanced-geometry roadmap
+
+The static-embedding limitation motivates richer representations, prioritized by feasibility:
+
+| Direction | What it buys | Status |
+|---|---|---|
+| **Personalized PageRank / graph diffusion** | principled, query-aware structural scoring (replaces hand-tuned bonus) | ✅ implemented |
+| **Late-interaction retrieval (ColBERT)** | token-level matching — directly fixes single-vector + cosine | 🔬 candidate |
+| **KG embeddings (RotatE / ComplEx / TransE)** | relations as geometric operations (`h ⊕ r ≈ t`); models composition/inversion for multi-hop and typed governance edges | 🔬 candidate |
+| **GNN node embeddings (GraphSAGE / node2vec)** | context-aware (non-static) chunk/entity representations | 🔭 research |
+| **Hyperbolic (Poincaré) embeddings** | low-distortion embedding of hierarchy/taxonomy | 🔭 research |
+| **Optimal transport** | distributional query↔neighborhood matching | 🔭 research |
+
+### KN structure is a tunable, measured variable
+
+Graph quality depends on **construction** choices, not just the scorer — chunk size/overlap (`HOTPOTQA_CHUNK_SIZE`, `HOTPOTQA_CHUNK_OVERLAP`) and entity granularity (`GraphRetrievalConfig`: `min_named_entity_tokens`, frequency caps, edge weights). These are exposed as knobs and should be **swept against the multi-hop metrics above** — tuned by measurement, not by intuition.
+
+> **Sequencing principle:** every added bit of mathematics must earn its place against the leakage-free multi-hop benchmark before it is adopted.
+
 ---
 
 ## 🎯 Use Cases

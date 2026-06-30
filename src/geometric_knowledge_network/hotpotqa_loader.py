@@ -45,6 +45,8 @@ class HotpotQALoader:
         filepath: Path,
         sample_size: int = 100,
         random_seed: int = 42,
+        chunk_size: int = 500,
+        chunk_overlap: int = 80,
     ) -> tuple[List[Document], List[Chunk], List[HotpotQASample]]:
         filepath = Path(filepath)
         self.ensure_dataset(filepath)
@@ -93,7 +95,7 @@ class HotpotQALoader:
             )
 
         ingestor = DocumentIngestor()
-        chunks = ingestor.chunk_documents(documents, chunk_size=500, chunk_overlap=80)
+        chunks = ingestor.chunk_documents(documents, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         return documents, chunks, samples
 
     def ensure_dataset(self, filepath: Path) -> Path:

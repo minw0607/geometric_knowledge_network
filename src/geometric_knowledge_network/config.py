@@ -24,6 +24,9 @@ class GKNConfig:
     hotpotqa_data_path: Path = field(default_factory=lambda: Path(os.getenv("HOTPOTQA_DATA_PATH", _resolve_repo_root() / "data/hotpot_train_v1.1.json")))
     hotpotqa_sample_size: int = field(default_factory=lambda: int(os.getenv("HOTPOTQA_SAMPLE_SIZE", "100")))
     hotpotqa_random_seed: int = field(default_factory=lambda: int(os.getenv("HOTPOTQA_RANDOM_SEED", "42")))
+    # KN structure knobs (sweep these against the multi-hop eval, do not tune blind).
+    hotpotqa_chunk_size: int = field(default_factory=lambda: int(os.getenv("HOTPOTQA_CHUNK_SIZE", "500")))
+    hotpotqa_chunk_overlap: int = field(default_factory=lambda: int(os.getenv("HOTPOTQA_CHUNK_OVERLAP", "80")))
     force_rebuild_vector_store: bool = field(default_factory=lambda: os.getenv("FORCE_REBUILD_VECTOR_STORE", "false").lower() == "true")
     embedding_choice: str = field(default_factory=lambda: os.getenv("EMBEDDING_CHOICE", "small").lower())
     embedding_fallback_to_local: bool = field(default_factory=lambda: os.getenv("EMBEDDING_FALLBACK_TO_LOCAL", "true").lower() == "true")

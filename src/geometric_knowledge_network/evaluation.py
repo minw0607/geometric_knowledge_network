@@ -56,10 +56,45 @@ def reciprocal_rank(results: List[RetrievalResult | HybridRetrievalResult], rele
     return 0.0
 
 
-def evaluate_retrieval(results: List[RetrievalResult | HybridRetrievalResult], relevant_chunk_ids: Set[str]) -> dict:
-    return {
+def document_recall(results: Iterable[RetrievalResult | HybridRetrievalResult], relevant_doc_ids: Set[str]) -> float:
+    """Fraction of supporting *documents* with at least one retrieved chunk.
+
+    For multi-hop QA this is the more meaningful signal than chunk recall: each
+    question has a small set of supporting documents (e.g. the two HotpotQA
+    articles), and the hard part is covering *all* of them — including the second
+    "bridge" document that is often semantically distant from the query.
+    """
+    if not relevant_doc_ids:
+        return 0.0
+    retrieved_doc_ids = {result.doc_id for result in results}
+    return len(retrieved_doc_ids & relevant_doc_ids) / len(relevant_doc_ids)
+
+
+def all_supporting_docs_hit(results: Iterable[RetrievalResult | HybridRetrievalResult], relevant_doc_ids: Set[str]) -> float:
+    """1.0 iff every supporting document is represented in the results.
+
+    This is the strict multi-hop success criterion: did we recover *both* hops,
+    not just the one the query points at directly?
+    """
+    if not relevant_doc_ids:
+        return 0.0
+    retrieved_doc_ids = {result.doc_id for result in results}
+    return float(relevant_doc_ids <= retrieved_doc_ids)
+
+
+def evaluate_retrieval(
+    results: List[RetrievalResult | HybridRetrievalResult],
+    relevant_chunk_ids: Set[str],
+    relevant_doc_ids: Set[str] | None = None,
+) -> dict:
+    metrics = {
         "hit_rate": top_k_hit_rate(results, relevant_chunk_ids),
         "recall_at_k": recall_at_k(results, relevant_chunk_ids),
         "precision_at_k": precision_at_k(results, relevant_chunk_ids),
         "mrr": reciprocal_rank(results, relevant_chunk_ids),
     }
+    if relevant_doc_ids is not None:
+        # Document-level / multi-hop metrics (the headline signal for KN value).
+        metrics["doc_recall"] = document_recall(results, relevant_doc_ids)
+        metrics["all_docs_hit"] = all_supporting_docs_hit(results, relevant_doc_ids)
+    return metrics
