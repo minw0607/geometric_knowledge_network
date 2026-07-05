@@ -30,7 +30,15 @@ from .graph_config import GraphRetrievalConfig
 from .hybrid_retriever import HybridRetrievalResult, VectorStoreLike
 from .schema import NodeType
 
-_BRIDGE_ENTITY_TYPES = {"NamedEntity", "TitleEntity", NodeType.CONCEPT.value}
+# Entities used to *seed* the walk (bridge anchors). Title entities are excluded
+# because a title links only to its own document's chunks — a same-document hub.
+_ENTITY_SEED_TYPES = {"NamedEntity", NodeType.CONCEPT.value}
+
+# Node types kept in the PPR *propagation* graph. Document and TitleEntity nodes
+# are dropped: they only connect a document to its own chunks, so leaving them in
+# pools PageRank mass on same-document siblings and starves the cross-document
+# bridge. Removing them forces the walk to travel through shared named entities.
+_PPR_NODE_TYPES = {NodeType.CHUNK.value, "NamedEntity", NodeType.CONCEPT.value}
 
 
 class MultiHopRetriever:
@@ -51,8 +59,9 @@ class MultiHopRetriever:
         top_k: int = 10,
         bridge_budget: int | None = None,
         ppr_alpha: float = 0.85,
-        ego_radius: int = 2,
+        ego_radius: int = 3,
         max_subgraph_nodes: int = 6000,
+        entity_seed_weight: float = 0.5,
     ) -> List[HybridRetrievalResult]:
         """Return up to ``top_k`` results: vector hits first, then PPR bridges.
 
@@ -87,7 +96,12 @@ class MultiHopRetriever:
 
         # Bridge discovery via Personalized PageRank seeded on the hop-1 region.
         ppr_scores = self._personalized_pagerank(
-            vector_results, query_terms, ppr_alpha=ppr_alpha, ego_radius=ego_radius, max_subgraph_nodes=max_subgraph_nodes
+            vector_results,
+            query_terms,
+            ppr_alpha=ppr_alpha,
+            ego_radius=ego_radius,
+            max_subgraph_nodes=max_subgraph_nodes,
+            entity_seed_weight=entity_seed_weight,
         )
         bridges = self._select_bridges(ppr_scores, core_ids, covered_docs, bridge_budget)
 
@@ -125,30 +139,38 @@ class MultiHopRetriever:
         ppr_alpha: float,
         ego_radius: int,
         max_subgraph_nodes: int,
+        entity_seed_weight: float,
     ) -> Dict[str, float]:
-        """Localized random-walk-with-restart, seeded on hop-1 chunks + query entities."""
+        """Localized random-walk-with-restart, seeded on hop-1 chunks + their entities."""
         seeds: Dict[str, float] = {}
         for result in vector_results:
-            if result.chunk_id in self.graph:
-                # Seed weight follows the vector score so stronger hits restart more often.
-                seeds[result.chunk_id] = seeds.get(result.chunk_id, 0.0) + max(result.score, 1e-3)
-                # Query-matching entities adjacent to this chunk are strong bridge anchors.
-                for neighbor in self.graph.neighbors(result.chunk_id):
-                    node = self.graph.nodes[neighbor]
-                    if node.get("node_type") in _BRIDGE_ENTITY_TYPES:
-                        label = str(node.get("label") or "").lower()
-                        if query_terms and any(term in label for term in query_terms):
-                            seeds[neighbor] = seeds.get(neighbor, 0.0) + self.config.query_overlap_bonus
+            if result.chunk_id not in self.graph:
+                continue
+            # Seed weight follows the vector score so stronger hits restart more often.
+            seeds[result.chunk_id] = seeds.get(result.chunk_id, 0.0) + max(result.score, 1e-3)
+            # Seed *every* named entity adjacent to a hop-1 chunk, not just those in
+            # the query: the entity that bridges to the second document is usually
+            # NOT mentioned in the query. Entities overlapping the query get a bonus.
+            for neighbor in self.graph.neighbors(result.chunk_id):
+                node = self.graph.nodes[neighbor]
+                if node.get("node_type") in _ENTITY_SEED_TYPES:
+                    weight = entity_seed_weight
+                    label = str(node.get("label") or "").lower()
+                    if query_terms and any(term in label for term in query_terms):
+                        weight += self.config.query_overlap_bonus
+                    seeds[neighbor] = seeds.get(neighbor, 0.0) + weight
 
         if not seeds:
             return {}
 
-        # Build a localized subgraph so PPR is fast and focused on the reachable region.
+        # Build a localized subgraph, then drop same-document hubs so PageRank mass
+        # flows through cross-document bridges rather than pooling on siblings.
         nodes: Set[str] = set()
         for seed_node in seeds:
             nodes.update(nx.single_source_shortest_path_length(self.graph, seed_node, cutoff=ego_radius).keys())
             if len(nodes) > max_subgraph_nodes:
                 break
+        nodes = {node for node in nodes if self.graph.nodes[node].get("node_type") in _PPR_NODE_TYPES}
         subgraph = self.graph.subgraph(nodes)
         if subgraph.number_of_nodes() == 0:
             return {}
