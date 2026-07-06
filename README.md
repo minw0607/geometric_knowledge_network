@@ -163,10 +163,10 @@ Dense embeddings are a *static* map of tokens to vectors compared by cosine — 
 The first prototype added a query-agnostic structural bonus `b(c)` to every candidate; on a fair (leakage-free) HotpotQA run this reshuffled strong hits and *hurt* MRR without improving coverage. The current scorer replaces it with a principled diffusion:
 
 1. **Add-not-demote.** Dense top hits keep their ranks (MRR preserved). The graph can only *add* bridge documents the vector search missed.
-2. **Personalized PageRank (random walk with restart).** Seed a personalization vector on the hop-1 chunks plus the query-matching entities adjacent to them, then propagate over a localized subgraph:
+2. **Personalized PageRank (random walk with restart).** Seed a personalization vector on the hop-1 chunks *and the named entities adjacent to them* (entities that also appear in the query are weighted higher — but a bridge entity usually is **not** in the query, so all adjacent entities are seeded). Same-document hubs (`Document`/`TitleEntity`) are dropped from the propagation graph so mass flows through shared entities to the *second* document instead of pooling on siblings. Propagate over a localized subgraph:
 
    ```text
-   r = α · W · r + (1 − α) · p          ( p = query-seeded restart distribution )
+   r = α · W · r + (1 − α) · p          ( p = seed restart distribution )
    ```
 
    The highest-scoring chunks from *new* documents fill a small bridge budget. This is the agentic multi-hop step (retrieve → seed → diffuse → add).
@@ -204,6 +204,37 @@ Graph quality depends on **construction** choices, not just the scorer — chunk
 
 ---
 
+## ⚖️ When to Use GKN — Strengths & Costs
+
+A knowledge network is **not** a free upgrade to every RAG pipeline. It pays off on *structure* problems and adds cost on *similarity* problems. Be deliberate about which one you have.
+
+### Where GKN gains the most
+
+- **Typed-relation questions embeddings cannot answer in principle.** *"Which control maps to this requirement?"*, *"What evidence supports this finding?"*, *"Does clause A contradict clause B?"*, *"If policy X changes, what is impacted?"* Cosine similarity has no notion of relation *type* or *direction* — the answer is a graph fact, not a nearest neighbor. This is a qualitative capability, not a recall bump.
+- **Traceability & auditability.** Even when retrieval accuracy ties, GKN returns an inspectable evidence path (`chunk → requirement → control → chunk`). For governance / model risk, a defensible evidence trail is a first-class deliverable that embeddings cannot provide at all.
+- **Genuinely hard multi-hop retrieval.** Large or open corpora where the second hop is *semantically distant* from the query (enterprise document sets, open-web retrieval). Here dense retrieval misses the bridge and graph expansion recovers it.
+- **Multi-hop / dependency / temporal / causal chains**, where each hop is a different relation type.
+
+### Where GKN is marginal (skip it)
+
+- **Pure similarity over strong embeddings.** When a modern embedding model already retrieves the right chunks (a near-ceiling task), the graph has little to add. On a *fair, leakage-free* HotpotQA-distractor run the gain is small and bounded — useful as a mechanism check, not a headline. (See the HotpotQA notebook.)
+- **Small, flat corpora** with few genuine cross-document relationships.
+- **Latency-critical, single-hop lookups** where the extra hop is not worth the milliseconds.
+
+### Costs & trade-offs (eyes open)
+
+| Cost | What it means | Mitigation in this repo |
+|---|---|---|
+| **Graph construction** | entity/relation extraction over the corpus; high-quality extraction implies LLM calls ($$ + review) | heuristic extraction for the MVP; frequency/confidence caps to limit noise |
+| **Per-query compute** | graph traversal / Personalized PageRank adds work on top of vector search — roughly *O(size of the localized subgraph)* per query, which grows with corpus and graph density | PPR is run on a **localized** ego-subgraph, not the full graph; ~sub-second per query at MVP scale |
+| **Memory & storage** | the graph (nodes, edges, attributes) lives alongside the vector index | lightweight NetworkX in-memory; Neo4j only if scale demands it |
+| **Maintenance / governance** | graphs drift and can encode extraction errors; they need validation, provenance, and versioning | provenance-by-`source_chunk_id` (target); leakage-free construction is enforced and tested |
+| **Bounded upside** | gains are capped by graph quality — a missing edge is a missed bridge | the retriever is **add-not-demote**, so a weak graph never *hurts* ranking; it only fails to help |
+
+> **Rule of thumb:** if you can phrase the need as *"what is similar to this?"*, a strong embedding model is usually enough. If you must ask *"what supports / maps to / depends on / contradicts this — and can you show me the path?"*, that is where the geometric knowledge network earns its cost.
+
+---
+
 ## 🗂️ Repository Structure
 
 ```text
@@ -227,16 +258,19 @@ geometric_knowledge_network/
 │   ├── graph_builder.py        # governance knowledge network
 │   ├── hotpotqa_loader.py      # HotpotQA load + auto-download / cache
 │   ├── hotpotqa_graph.py       # HotpotQA graph (corpus-only, leakage-free)
-│   ├── hotpotqa_relevance.py   # supporting-title relevance (eval only)
+│   ├── hotpotqa_relevance.py   # supporting-title + supporting-doc relevance (eval only)
 │   ├── hotpotqa_benchmark.py   # baseline vs hybrid runner
-│   ├── hybrid_retriever.py     # vector + graph expansion + re-ranking
+│   ├── hybrid_retriever.py     # vector + graph expansion + re-ranking (legacy contrast)
+│   ├── multihop_retriever.py   # add-not-demote retriever w/ Personalized PageRank
+│   ├── multihop_benchmark.py   # baseline vs hybrid vs multihop (chunk + doc metrics)
 │   ├── path_explainer.py       # graph path explanations
-│   ├── evaluation.py           # hit-rate / recall@k / precision@k / MRR
+│   ├── evaluation.py           # hit/recall/precision/MRR + doc_recall / all_docs_hit
 │   └── visualization.py, reporting.py
 │
 └── tests/
     ├── test_smoke.py           # governance pipeline
-    └── test_hotpotqa.py        # HotpotQA pipeline + leakage guard
+    ├── test_hotpotqa.py        # HotpotQA pipeline + leakage guard
+    └── test_multihop.py        # multi-hop retriever + doc-level metrics
 ```
 
 ---
