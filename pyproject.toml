@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geometric-knowledge-network"
+version = "0.1.0"
+description = "A pragmatic, local-first framework that augments vector retrieval with a lightweight, inspectable knowledge graph for document-grounded reasoning, evidence traceability, and AI evaluation."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Min Wu" }]
+keywords = ["rag", "knowledge-graph", "retrieval", "ai-evaluation", "governance"]
+
+# Core dependencies only — the package imports and runs the TF-IDF baseline,
+# graph, and multi-hop retriever without faiss/openai (see optional extras).
+dependencies = [
+    "networkx>=3.3",
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.4.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+cloud = ["openai>=1.30.0"]          # Azure / OpenAI-compatible embeddings
+faiss = ["faiss-cpu>=1.8.0"]        # faster vector index (NumPy fallback otherwise)
+local = ["sentence-transformers>=3.0.1"]  # local embedding model
+viz = ["matplotlib>=3.8.0"]
+docs = ["pypdf>=4.2.0", "python-docx>=1.1.0"]
+all = [
+    "openai>=1.30.0",
+    "faiss-cpu>=1.8.0",
+    "sentence-transformers>=3.0.1",
+    "matplotlib>=3.8.0",
+    "pypdf>=4.2.0",
+    "python-docx>=1.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/minw0607/geometric_knowledge_network"
+
+[tool.setuptools.packages.find]
+where = ["src"]
