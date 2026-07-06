@@ -11,13 +11,30 @@
 [![Vectors: FAISS](https://img.shields.io/badge/Vectors-FAISS-005571.svg)](https://faiss.ai/)
 [![Benchmark: HotpotQA](https://img.shields.io/badge/Benchmark-HotpotQA-412991.svg)](https://hotpotqa.github.io/)
 
-*hybrid retrieval · multi-hop graph expansion · typed evidence paths · governance & HotpotQA adapters · local-first*
+*hybrid retrieval · multi-hop graph bridges · typed evidence paths · governance & HotpotQA adapters · local-first*
 
 </div>
 
 ---
 
-> **Core idea:** a vector store tells us what is *semantically close*; a geometric knowledge network adds what is *structurally connected* — supporting, dependent, mapped, or implicated — and makes the evidence path **visible**.
+> **Core idea:** a vector store tells you what is *semantically close*; a geometric knowledge network adds what is *structurally connected* — supporting, dependent, mapped, or implicated — and makes the evidence path **visible**.
+
+---
+
+## Contents
+
+- [Overview](#-overview)
+- [Why a knowledge network?](#-why-a-knowledge-network)
+- [What a GKN is](#-what-a-gkn-is)
+- [Architecture](#-architecture)
+- [Graph schema](#-graph-schema)
+- [Retrieval and scoring](#-retrieval-and-scoring)
+- [When to use GKN](#-when-to-use-gkn)
+- [Use cases](#-use-cases)
+- [Quick start](#-quick-start)
+- [The HotpotQA benchmark](#-the-hotpotqa-benchmark)
+- [Roadmap](#-roadmap)
+- [References and grounding](#-references-and-grounding)
 
 ---
 
@@ -27,7 +44,7 @@ A full enterprise-scale knowledge graph is expensive to build and hard to govern
 
 > **raw documents + vector embeddings + a lightweight knowledge graph + traces + LLM orchestration.**
 
-This delivers much of the value of graph-geometric reasoning — multi-hop retrieval, explicit evidence paths, structural relevance — **without** a universal world model, a graph database, or graph neural networks up front. The graph is an *indexed, reviewable layer over the source documents*, not the ultimate source of truth.
+That delivers much of the value of graph-geometric reasoning — multi-hop retrieval, explicit evidence paths, structural relevance — **without** a universal world model, a graph database, or graph neural networks up front. The graph is an *indexed, reviewable layer over the source documents*, not the ultimate source of truth.
 
 The framework is built **general-purpose first, then specialized per use case**. The two reference adapters today are **AI governance / model-risk documents** and the **HotpotQA** multi-hop QA benchmark.
 
@@ -35,85 +52,70 @@ The framework is built **general-purpose first, then specialized per use case**.
 
 ---
 
-## 🧭 At a Glance
+## 🤔 Why a knowledge network?
 
-```
-┌──────────────┬─────────────────┬─────────────────────┬──────────────────────┬───────────────────┐
-│  DOCUMENTS   │   VECTOR INDEX  │   KNOWLEDGE GRAPH   │   HYBRID RETRIEVAL   │    EVALUATION     │
-│              │                 │                     │                      │                   │
-│ parse +      │ FAISS / TF-IDF  │ NetworkX, typed     │ vector hits          │ hit-rate, recall  │
-│ chunk into   │ cached          │ entities & edges,   │ + graph expansion    │ precision, MRR    │
-│ stable units │ embeddings,     │ corpus-grounded,    │ + re-ranking         │ + inspectable     │
-│ + metadata   │ semantic search │ leakage-free        │                      │ evidence paths    │
-└──────────────┴─────────────────┴─────────────────────┴──────────────────────┴───────────────────┘
-```
-
----
-
-## 🤔 Why This Matters
-
-In most RAG systems, vector retrieval is the primary substrate — great when the question is essentially *"what text is semantically similar to this query?"*
-
-But many high-value governance, audit, and evaluation questions are **structure** problems, not just **similarity** problems:
+In most RAG systems, vector retrieval is the primary substrate — great when the question is essentially *"what text is semantically similar to this query?"* But many governance, audit, and evaluation questions are **structure** problems, not just **similarity** problems:
 
 | Question | Vector-only | GKN-enhanced |
 |---|:---:|:---:|
-| What is **similar** to this query? | ✅ Strong | ✅ Strong |
-| What **supports** this claim? | ⚠️ Weak | ✅ via `SUPPORTS` / `CITES` paths |
-| What **maps to** this requirement? | ⚠️ Weak | ✅ via `MAPS_TO` edges |
-| What is the **multi-hop** answer across articles? | ⚠️ Limited | ✅ via graph expansion |
-| **Why** was this chunk surfaced? | ❌ Score only | ✅ inspectable node/edge path |
+| What is **similar** to this query? | ✅ strong | ✅ strong |
+| What **supports** this claim? | ⚠️ weak | ✅ via `SUPPORTS` / `CITES` paths |
+| What **maps to** this requirement? | ⚠️ weak | ✅ via `MAPS_TO` edges |
+| What is the **multi-hop** answer across articles? | ⚠️ limited | ✅ via graph bridges |
+| **Why** was this chunk surfaced? | ❌ score only | ✅ inspectable node/edge path |
 
-> **Design distinction:** a vector store optimizes neighborhood in *embedding space*; GKN adds explicit relational *structure* that can surface relevant chunks even when they are not the nearest semantic match.
+**The multi-hop intuition.** A dense embedding is a *static* map of tokens to a vector, compared by cosine. It reliably finds the **first hop** — the document the query looks like. It struggles with the **second, "bridge" hop** — a document reachable only through a shared entity and often *semantically distant* from the query. The graph is what carries you across that second hop:
 
-<p align="center">
-  <img src="docs/images/baseline_vs_hybrid.png" alt="Baseline vs hybrid retrieval" width="880">
-</p>
+```mermaid
+flowchart LR
+    Q(["Query"]) ==>|"semantic match"| A["Doc A · hop 1"]
+    Q -. "semantically distant" .-> B["Doc B · hop 2 (bridge)"]
+    A ==>|"shared entity"| B
+    classDef hit fill:#e1f5ee,stroke:#0f6e56,color:#04342c;
+    classDef bridge fill:#faeeda,stroke:#854f0b,color:#412402;
+    class A hit
+    class B bridge
+```
+
+The vector search lands on **Doc A**; it does *not* reach **Doc B** directly. But A and B share an entity, so the knowledge network bridges to B — recovering the hop the embedding misses. This is the entire value proposition, and the metric that captures it is **multi-hop document coverage** (did we recover *every* supporting document, including the bridge?), not raw similarity.
 
 ---
 
-## 🧱 What Is a Geometric Knowledge Network Here?
+## 🧠 What a GKN is
 
-A GKN is a **hybrid representation** with four conceptual layers — only the first two are implemented in the MVP:
+A GKN is a **hybrid representation** with four conceptual layers. Only the first two are implemented in the MVP:
 
 | Layer | What it represents | Example | Status |
 |---|---|---|:---:|
-| **Symbolic graph** | Entities and typed relationships | `Requirement —MAPS_TO→ Control` | ✅ |
-| **Geometric layer** | Embeddings, distances, neighborhoods | similar requirements cluster | ✅ |
-| **Constraint layer** | Rules and directional dependencies | *a finding must be supported by evidence* | 🔜 |
-| **Dynamic layer** | Sequences, actions, agent traces | `prompt → retrieval → tool → answer → eval` | 🔜 |
+| **Symbolic graph** | entities and typed relationships | `Requirement —MAPS_TO→ Control` | ✅ |
+| **Geometric layer** | embeddings, distances, neighborhoods | similar requirements cluster | ✅ |
+| **Constraint layer** | rules and directional dependencies | *a finding must be supported by evidence* | 🔜 |
+| **Dynamic layer** | sequences, actions, agent traces | `prompt → retrieval → tool → answer → eval` | 🔜 |
 
-"Geometric" is interpreted pragmatically — **embedding space + graph structure + retrieval paths** — not (yet) non-Euclidean KG embeddings or graph neural networks. Those are explicit later-phase options, not MVP requirements.
+"Geometric" is meant pragmatically — **embedding space + graph structure + retrieval paths** — not (yet) non-Euclidean KG embeddings or graph neural networks. Those are explicit later-phase options (see [Roadmap](#-roadmap)), not MVP requirements.
 
 ---
 
-## 🏗️ Architecture
+## 🧭 Architecture
 
-```text
-Raw Documents
-   │
-   ▼
-Chunking ─ stable evidence units + metadata
-   │
-   ├──────────────► Vector Index ──────────► Baseline Retrieval
-   ▼
-Typed Entity / Relation Extraction ─ heuristic now; LLM-assisted later
-   │
-   ▼
-Geometric Knowledge Network ─ NetworkX (Neo4j later)
-   │
-   ▼
-Hybrid Retrieval ─ vector hits + graph expansion + re-ranking
-   │
-   ▼
-Evaluation + Path Explanations + Reports + Figures + Saved Artifacts
+Source documents stay the source of truth; structure is layered on top. The vector index and the knowledge network are built from the *same* chunks, then combined at retrieval time.
+
+```mermaid
+flowchart TD
+    D["Raw documents"] --> C["Chunking<br/>stable units + metadata"]
+    C --> V["Vector index<br/>FAISS or TF-IDF"]
+    C --> X["Typed entity / relation<br/>extraction"]
+    X --> G[("Knowledge network<br/>NetworkX")]
+    V --> R{{"Hybrid / multi-hop retrieval<br/>vector hits + graph bridges"}}
+    G --> R
+    R --> O["Evaluation · evidence paths<br/>reports · figures · artifacts"]
 ```
 
-**MVP component choices:** parsing (`pypdf`, `python-docx`) · embeddings (OpenAI / Azure or local `sentence-transformers`) · vector store (FAISS, with a dependency-light TF-IDF fallback) · graph store (NetworkX) · orchestration (plain Python) · evaluation (pandas + rule checks; LLM-as-judge later).
+**MVP component choices:** parsing (`pypdf`, `python-docx`) · embeddings (OpenAI / Azure, or local `sentence-transformers`) · vector store (FAISS, with a dependency-light TF-IDF and NumPy fallback) · graph store (NetworkX) · orchestration (plain Python) · evaluation (pandas + rule checks; LLM-as-judge later).
 
 ---
 
-## 🧩 Graph Schema (initial)
+## 🧩 Graph schema
 
 The schema is intentionally **small** in Phase 1 — broad schemas create extraction noise and governance burden.
 
@@ -125,51 +127,43 @@ The schema is intentionally **small** in Phase 1 — broad schemas create extrac
 `CONTAINS` · `MENTIONS` · `REQUIRES` · `MAPS_TO` · `SUPPORTS` · `CONTRADICTS` · `DEPENDS_ON` · `CITES`
 *(planned: `GENERATED_BY`, `PRECEDES` for traces)*
 
-> **Extraction principle (target):** every node/edge carries `source_chunk_id`, a confidence score, and provenance; no relation is inferred unless explicitly supported by the source chunk. *(The MVP uses lightweight heuristic extraction; LLM-assisted extraction with provenance is a planned upgrade.)*
+> **Extraction principle (target):** every node/edge carries `source_chunk_id`, a confidence score, and provenance; no relation is inferred unless it is explicitly supported by the source chunk. *(The MVP uses lightweight heuristic extraction; LLM-assisted extraction with provenance is a planned upgrade.)*
 
 Use-case adapters define their own vocabulary — for **HotpotQA**: `Document` · `Chunk` · `TitleEntity` · `NamedEntity` · `Concept`, plus corpus-derived `SHARES_ENTITY` bridge edges.
 
 ---
 
-## 🔢 Theoretical Formulation
+## 🔢 Retrieval and scoring
 
-Hybrid retrieval combines a semantic score and a graph-derived bonus:
+Hybrid retrieval combines a semantic score with a graph-derived contribution:
 
 ```text
 s_hyb(q, c) = s_vec(q, c) + b(c)
 ```
 
 - `s_vec(q, c)` — semantic similarity between query and chunk
-- `b(c)` — a bonus from the chunk's typed structural neighborhood and graph expansion
+- `b(c)` — a structural contribution from the chunk's typed neighborhood and graph reachability
 
 <p align="center">
-  <img src="docs/images/math_semantic_vs_structural.png" alt="Semantic vs structural closeness" width="820">
+  <img src="docs/images/math_semantic_vs_structural.png" alt="Semantic vs structural closeness" width="760">
 </p>
 
-**Example multi-hop flow** — baseline finds a chunk stating *"annual review is required"*; the graph links that requirement to `Control C-101`; a chunk mentioning `C-101` is then pulled in via expansion, even though it was not a top semantic match:
+### Scoring: from an ad-hoc bonus to Personalized PageRank
 
-```text
-Chunk A → Requirement → Control C-101 → Chunk B
-```
+The first prototype added a query-agnostic bonus `b(c)` to every candidate. On a *fair (leakage-free)* HotpotQA run this reshuffled strong hits and **hurt** ranking (MRR) without improving coverage. The current scorer replaces it with a principled diffusion:
 
-📐 Full treatment (graph construction, structural closeness, worked examples): [docs/mathematical_formulation.md](docs/mathematical_formulation.md)
-
-### Where the knowledge network actually helps
-
-Dense embeddings are a *static* map of tokens to vectors compared by cosine — strong on the **first hop** (chunks close to the query) but weak on the **second "bridge" hop**: a supporting document reachable only through a shared entity and often semantically distant from the query. So the headline metric is not raw similarity but **multi-hop document coverage** — `doc_recall` and `all_docs_hit` (did we recover *every* supporting document, including the bridge?).
-
-### Scoring: from ad-hoc bonus to Personalized PageRank
-
-The first prototype added a query-agnostic structural bonus `b(c)` to every candidate; on a fair (leakage-free) HotpotQA run this reshuffled strong hits and *hurt* MRR without improving coverage. The current scorer replaces it with a principled diffusion:
-
-1. **Add-not-demote.** Dense top hits keep their ranks (MRR preserved). The graph can only *add* bridge documents the vector search missed.
-2. **Personalized PageRank (random walk with restart).** Seed a personalization vector on the hop-1 chunks *and the named entities adjacent to them* (entities that also appear in the query are weighted higher — but a bridge entity usually is **not** in the query, so all adjacent entities are seeded). Same-document hubs (`Document`/`TitleEntity`) are dropped from the propagation graph so mass flows through shared entities to the *second* document instead of pooling on siblings. Propagate over a localized subgraph:
+1. **Add-not-demote.** The dense top hits keep their ranks, so ranking quality (MRR) is preserved. The graph can only **add** bridge documents the vector search missed.
+2. **Personalized PageRank** (random walk with restart) over a *localized* subgraph:
 
    ```text
    r = α · W · r + (1 − α) · p          ( p = seed restart distribution )
    ```
 
-   The highest-scoring chunks from *new* documents fill a small bridge budget. This is the agentic multi-hop step (retrieve → seed → diffuse → add).
+   The walk is seeded on the hop-1 chunks **and the named entities adjacent to them** (query-matching entities weighted higher — but the bridging entity is usually *not* in the query, so all adjacent entities are seeded). Same-document hubs (`Document`/`TitleEntity`) are dropped from propagation so PageRank mass flows through shared entities to the *second* document instead of pooling on siblings. The top-scoring chunks from *new* documents fill a small bridge budget.
+
+This is the agentic multi-hop step: **retrieve → seed → diffuse → add**.
+
+📐 Fuller treatment (graph construction, structural closeness, worked examples): [docs/mathematical_formulation.md](docs/mathematical_formulation.md)
 
 ### Advanced-geometry roadmap
 
@@ -177,22 +171,60 @@ The static-embedding limitation motivates richer representations, prioritized by
 
 | Direction | What it buys | Status |
 |---|---|---|
-| **Personalized PageRank / graph diffusion** | principled, query-aware structural scoring (replaces hand-tuned bonus) | ✅ implemented |
+| **Personalized PageRank / graph diffusion** | principled, query-aware structural scoring (replaces the hand-tuned bonus) | ✅ implemented |
 | **Late-interaction retrieval (ColBERT)** | token-level matching — directly fixes single-vector + cosine | 🔬 candidate |
-| **KG embeddings (RotatE / ComplEx / TransE)** | relations as geometric operations (`h ⊕ r ≈ t`); models composition/inversion for multi-hop and typed governance edges | 🔬 candidate |
+| **KG embeddings (RotatE / ComplEx / TransE)** | relations as geometric operations (`h ⊕ r ≈ t`); models composition/inversion for multi-hop and typed edges | 🔬 candidate |
 | **GNN node embeddings (GraphSAGE / node2vec)** | context-aware (non-static) chunk/entity representations | 🔭 research |
 | **Hyperbolic (Poincaré) embeddings** | low-distortion embedding of hierarchy/taxonomy | 🔭 research |
-| **Optimal transport** | distributional query↔neighborhood matching | 🔭 research |
+| **Optimal transport** | distributional query ↔ neighborhood matching | 🔭 research |
 
-### KN structure is a tunable, measured variable
-
-Graph quality depends on **construction** choices, not just the scorer — chunk size/overlap (`HOTPOTQA_CHUNK_SIZE`, `HOTPOTQA_CHUNK_OVERLAP`) and entity granularity (`GraphRetrievalConfig`: `min_named_entity_tokens`, frequency caps, edge weights). These are exposed as knobs and should be **swept against the multi-hop metrics above** — tuned by measurement, not by intuition.
-
-> **Sequencing principle:** every added bit of mathematics must earn its place against the leakage-free multi-hop benchmark before it is adopted.
+> **Sequencing principle:** every added bit of mathematics must earn its place against the leakage-free multi-hop benchmark before it is adopted. Graph *construction* is also a measured variable — chunk size/overlap (`HOTPOTQA_CHUNK_SIZE`, `HOTPOTQA_CHUNK_OVERLAP`) and entity granularity (`GraphRetrievalConfig`) are exposed as knobs to **sweep against the metrics**, not tune by intuition.
 
 ---
 
-## 🎯 Use Cases
+## 💡 When to use GKN
+
+A knowledge network is **not** a free upgrade to every RAG pipeline. It pays off on *structure* problems and adds cost on *similarity* problems. The one-question test:
+
+```mermaid
+flowchart TD
+    S{"What are you<br/>really asking?"}
+    S -->|"what is similar to this?"| E["Embeddings are enough"]
+    S -->|"what supports / maps to /<br/>depends on this — show the path?"| K["Use the knowledge network"]
+    classDef a fill:#e6f1fb,stroke:#185fa5,color:#042c53;
+    classDef b fill:#eeedfe,stroke:#534ab7,color:#26215c;
+    class E a
+    class K b
+```
+
+### Where GKN gains the most
+
+- **Typed-relation questions embeddings cannot answer in principle.** *"Which control maps to this requirement?"*, *"What evidence supports this finding?"*, *"Does clause A contradict clause B?"*, *"If policy X changes, what is impacted?"* Cosine similarity has no notion of relation *type* or *direction* — the answer is a graph fact, not a nearest neighbor. A qualitative capability, not a recall bump.
+- **Traceability and auditability.** Even when retrieval accuracy ties, GKN returns an inspectable evidence path (`chunk → requirement → control → chunk`). For governance / model risk, a defensible evidence trail is a first-class deliverable embeddings cannot provide at all.
+- **Genuinely hard multi-hop retrieval.** Large or open corpora where the second hop is *semantically distant* from the query (enterprise document sets, open-web retrieval) — dense retrieval misses the bridge and the graph recovers it.
+- **Dependency / temporal / causal chains**, where each hop is a different relation type.
+
+### Where GKN is marginal (skip it)
+
+- **Pure similarity over strong embeddings.** When a modern embedding model already retrieves the right chunks (a near-ceiling task), the graph has little to add. On a fair, leakage-free HotpotQA-distractor run the gain is small and bounded — a mechanism check, not a headline (see the [HotpotQA benchmark](#-the-hotpotqa-benchmark)).
+- **Small, flat corpora** with few genuine cross-document relationships.
+- **Latency-critical, single-hop lookups** where the extra hop is not worth the milliseconds.
+
+### Costs and trade-offs (eyes open)
+
+| Cost | What it means | Mitigation in this repo |
+|---|---|---|
+| **Graph construction** | entity/relation extraction over the corpus; high-quality extraction implies LLM calls ($$ + review) | heuristic extraction for the MVP; frequency/confidence caps to limit noise |
+| **Per-query compute** | graph traversal / PageRank adds work on top of vector search — roughly *O(size of the localized subgraph)* per query, which grows with corpus and graph density | PPR runs on a **localized** ego-subgraph, not the full graph; ~sub-second per query at MVP scale |
+| **Memory & storage** | the graph (nodes, edges, attributes) lives alongside the vector index | lightweight in-memory NetworkX; Neo4j only if scale demands it |
+| **Maintenance / governance** | graphs drift and can encode extraction errors; they need validation, provenance, versioning | provenance-by-`source_chunk_id` (target); leakage-free construction is enforced and tested |
+| **Bounded upside** | gains are capped by graph quality — a missing edge is a missed bridge | the retriever is **add-not-demote**, so a weak graph never *hurts* ranking; it only fails to help |
+
+> **Rule of thumb:** if you can phrase the need as *"what is similar to this?"*, a strong embedding model is usually enough. If you must ask *"what supports / maps to / depends on / contradicts this — and can you show me the path?"*, that is where the geometric knowledge network earns its cost.
+
+---
+
+## 🎯 Use cases
 
 | Use case | Example question | Where structure helps | Status |
 |---|---|---|:---:|
@@ -204,78 +236,7 @@ Graph quality depends on **construction** choices, not just the scorer — chunk
 
 ---
 
-## ⚖️ When to Use GKN — Strengths & Costs
-
-A knowledge network is **not** a free upgrade to every RAG pipeline. It pays off on *structure* problems and adds cost on *similarity* problems. Be deliberate about which one you have.
-
-### Where GKN gains the most
-
-- **Typed-relation questions embeddings cannot answer in principle.** *"Which control maps to this requirement?"*, *"What evidence supports this finding?"*, *"Does clause A contradict clause B?"*, *"If policy X changes, what is impacted?"* Cosine similarity has no notion of relation *type* or *direction* — the answer is a graph fact, not a nearest neighbor. This is a qualitative capability, not a recall bump.
-- **Traceability & auditability.** Even when retrieval accuracy ties, GKN returns an inspectable evidence path (`chunk → requirement → control → chunk`). For governance / model risk, a defensible evidence trail is a first-class deliverable that embeddings cannot provide at all.
-- **Genuinely hard multi-hop retrieval.** Large or open corpora where the second hop is *semantically distant* from the query (enterprise document sets, open-web retrieval). Here dense retrieval misses the bridge and graph expansion recovers it.
-- **Multi-hop / dependency / temporal / causal chains**, where each hop is a different relation type.
-
-### Where GKN is marginal (skip it)
-
-- **Pure similarity over strong embeddings.** When a modern embedding model already retrieves the right chunks (a near-ceiling task), the graph has little to add. On a *fair, leakage-free* HotpotQA-distractor run the gain is small and bounded — useful as a mechanism check, not a headline. (See the HotpotQA notebook.)
-- **Small, flat corpora** with few genuine cross-document relationships.
-- **Latency-critical, single-hop lookups** where the extra hop is not worth the milliseconds.
-
-### Costs & trade-offs (eyes open)
-
-| Cost | What it means | Mitigation in this repo |
-|---|---|---|
-| **Graph construction** | entity/relation extraction over the corpus; high-quality extraction implies LLM calls ($$ + review) | heuristic extraction for the MVP; frequency/confidence caps to limit noise |
-| **Per-query compute** | graph traversal / Personalized PageRank adds work on top of vector search — roughly *O(size of the localized subgraph)* per query, which grows with corpus and graph density | PPR is run on a **localized** ego-subgraph, not the full graph; ~sub-second per query at MVP scale |
-| **Memory & storage** | the graph (nodes, edges, attributes) lives alongside the vector index | lightweight NetworkX in-memory; Neo4j only if scale demands it |
-| **Maintenance / governance** | graphs drift and can encode extraction errors; they need validation, provenance, and versioning | provenance-by-`source_chunk_id` (target); leakage-free construction is enforced and tested |
-| **Bounded upside** | gains are capped by graph quality — a missing edge is a missed bridge | the retriever is **add-not-demote**, so a weak graph never *hurts* ranking; it only fails to help |
-
-> **Rule of thumb:** if you can phrase the need as *"what is similar to this?"*, a strong embedding model is usually enough. If you must ask *"what supports / maps to / depends on / contradicts this — and can you show me the path?"*, that is where the geometric knowledge network earns its cost.
-
----
-
-## 🗂️ Repository Structure
-
-```text
-geometric_knowledge_network/
-│
-├── data/
-│   ├── sample_docs/            # synthetic governance corpus
-│   ├── eval_queries.json       # governance benchmark queries
-│   └── hotpot_train_v1.1.json  # HotpotQA — downloaded on demand   [git-ignored]
-│
-├── notebooks/
-│   ├── 99_end_to_end_demo.ipynb                  # governance demo
-│   └── 11_hotpotqa_knowledge_network_demo.ipynb  # HotpotQA demo (fair benchmark)
-│
-├── src/geometric_knowledge_network/
-│   ├── config.py               # env-driven configuration
-│   ├── schema.py               # node / edge type enums
-│   ├── ingest.py               # parsing + chunking
-│   ├── extraction.py           # governance heuristic extraction
-│   ├── vector_store.py         # TF-IDF baseline + embedding store (FAISS, cached)
-│   ├── graph_builder.py        # governance knowledge network
-│   ├── hotpotqa_loader.py      # HotpotQA load + auto-download / cache
-│   ├── hotpotqa_graph.py       # HotpotQA graph (corpus-only, leakage-free)
-│   ├── hotpotqa_relevance.py   # supporting-title + supporting-doc relevance (eval only)
-│   ├── hotpotqa_benchmark.py   # baseline vs hybrid runner
-│   ├── hybrid_retriever.py     # vector + graph expansion + re-ranking (legacy contrast)
-│   ├── multihop_retriever.py   # add-not-demote retriever w/ Personalized PageRank
-│   ├── multihop_benchmark.py   # baseline vs hybrid vs multihop (chunk + doc metrics)
-│   ├── path_explainer.py       # graph path explanations
-│   ├── evaluation.py           # hit/recall/precision/MRR + doc_recall / all_docs_hit
-│   └── visualization.py, reporting.py
-│
-└── tests/
-    ├── test_smoke.py           # governance pipeline
-    ├── test_hotpotqa.py        # HotpotQA pipeline + leakage guard
-    └── test_multihop.py        # multi-hop retriever + doc-level metrics
-```
-
----
-
-## 🚀 Quick Start
+## 🚀 Quick start
 
 ```bash
 python -m venv .venv
@@ -283,7 +244,7 @@ source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-Create a `.env` (all optional — sensible defaults apply):
+Create a `.env` (all optional — sensible defaults apply; see `.env.example`):
 
 ```ini
 # Embeddings: "local" (sentence-transformers), "small", or "large" (OpenAI/Azure)
@@ -297,72 +258,89 @@ FORCE_REBUILD_VECTOR_STORE=false
 
 Launch Jupyter and open a demo:
 
-```bash
-jupyter notebook
-```
-
 | Notebook | What it shows |
 |---|---|
-| `notebooks/99_end_to_end_demo.ipynb` | Governance corpus: baseline vs GKN-enhanced retrieval |
-| `notebooks/11_hotpotqa_knowledge_network_demo.ipynb` | HotpotQA: fair, leakage-free benchmark with path explanations |
+| `notebooks/99_end_to_end_demo.ipynb` | governance corpus — baseline vs GKN-enhanced retrieval |
+| `notebooks/11_hotpotqa_knowledge_network_demo.ipynb` | HotpotQA — fair, leakage-free benchmark with path explanations |
 
-The notebooks are deliberately **code-light** — implementation lives in `src/`.
+The notebooks are deliberately **code-light** — implementation lives in `src/`. `faiss` and `openai` are optional (NumPy index + local-embedding fallbacks are built in), so the notebooks run on both macOS and Windows without native builds.
 
-**Run the tests** *(dependency-light — TF-IDF path, no faiss/openai/dataset needed):*
+**Run the tests** *(dependency-light — TF-IDF path; no faiss/openai/dataset needed):*
 
 ```bash
 pip install pytest
 PYTHONPATH=src python -m pytest tests/
 ```
 
+<details>
+<summary><strong>Repository structure</strong></summary>
+
+```text
+geometric_knowledge_network/
+├── data/
+│   ├── sample_docs/            # synthetic governance corpus
+│   ├── eval_queries.json       # governance benchmark queries
+│   └── hotpot_train_v1.1.json  # HotpotQA — downloaded on demand   [git-ignored]
+├── notebooks/
+│   ├── 99_end_to_end_demo.ipynb                  # governance demo
+│   └── 11_hotpotqa_knowledge_network_demo.ipynb  # HotpotQA demo (fair benchmark)
+├── src/geometric_knowledge_network/
+│   ├── config.py               # env-driven configuration
+│   ├── schema.py               # node / edge type enums
+│   ├── ingest.py               # parsing + chunking
+│   ├── extraction.py           # governance heuristic extraction
+│   ├── vector_store.py         # TF-IDF baseline + embedding store (FAISS/NumPy, cached)
+│   ├── graph_builder.py        # governance knowledge network
+│   ├── hotpotqa_loader.py      # HotpotQA load + auto-download / cache
+│   ├── hotpotqa_graph.py       # HotpotQA graph (corpus-only, leakage-free)
+│   ├── hotpotqa_relevance.py   # supporting-title + supporting-doc relevance (eval only)
+│   ├── hybrid_retriever.py     # vector + graph expansion (legacy contrast)
+│   ├── multihop_retriever.py   # add-not-demote retriever w/ Personalized PageRank
+│   ├── multihop_benchmark.py   # baseline vs hybrid vs multihop (chunk + doc metrics)
+│   ├── path_explainer.py       # graph path explanations
+│   ├── evaluation.py           # hit/recall/precision/MRR + doc_recall / all_docs_hit
+│   └── visualization.py, reporting.py
+└── tests/
+    ├── test_smoke.py           # governance pipeline
+    ├── test_hotpotqa.py        # HotpotQA pipeline + leakage guard
+    └── test_multihop.py        # multi-hop retriever + doc-level metrics
+```
+
+</details>
+
 ---
 
-## 🧪 The HotpotQA Benchmark — and a Note on Fairness
+## 🧪 The HotpotQA benchmark
 
 [HotpotQA](https://hotpotqa.github.io/) is a multi-hop QA dataset where answering requires bridging across multiple articles — a natural fit for graph-augmented retrieval.
 
-**🔄 Automatic data handling.** The dataset is **downloaded and cached on first use** (default `data/hotpot_train_v1.1.json`, ~570 MB, git-ignored). The loader tries the official CMU mirror first and **falls back to the Hugging Face mirror** automatically if CMU is unreachable, converting it to the canonical HotpotQA schema. Later runs load the local copy directly.
+**🔄 Automatic data handling.** The dataset is **downloaded and cached on first use** (default `data/hotpot_train_v1.1.json`, ~570 MB, git-ignored). The loader tries the official CMU mirror first and **falls back to the Hugging Face mirror** automatically, converting it to the canonical schema. Later runs load the local copy directly.
 
-**🛡️ Leakage-free comparison.** The retrieval graph is built from **observable corpus text only**. Gold supporting facts are used *exclusively* to define evaluation relevance — they are **never** encoded into the graph the retriever uses.
+**🛡️ Leakage-free comparison.** The retrieval graph is built from **observable corpus text only**. Gold supporting facts are used *exclusively* to define evaluation relevance — never encoded into the graph the retriever uses. *(An earlier version added `SupportingFact` nodes / `SUPPORTS` edges from the gold labels and rewarded the retriever for landing near them — that leaks the answer key. It was removed.)*
 
-> An earlier version added `SupportingFact` nodes / `SUPPORTS` edges from the gold labels and rewarded the retriever for landing near them — which leaks the answer key. With that removed, the baseline-vs-hybrid numbers are honest: the hybrid retriever must *earn* any gain. Expect it to sometimes **tie or trail** the baseline today — that is exactly the signal that drives the next round of graph-scoring improvements.
+**📊 Honest result.** With strong embeddings the dense baseline is already near-ceiling, so the knowledge network's gain is **real but small** here: the multi-hop retriever *preserves ranking (MRR)* and lifts multi-hop document coverage (`doc_recall`, `all_docs_hit`). Treat HotpotQA-distractor as a *mechanism check* — the meaningful value lives in the structural/traceability tasks under [When to use GKN](#-when-to-use-gkn). The notebook's final note lists the follow-ups (sentence-level relevance, an agentic loop, fullwiki / hard-bridge subsets).
 
 ---
 
-## 🗺️ Roadmap
+## 🗺 Roadmap
 
 This MVP exists to answer one question: **does a lightweight knowledge network measurably improve retrieval, traceability, and evaluation over vector-only RAG?**
 
-**Current limitations**
-- heuristic extraction (not yet LLM-assisted with provenance/confidence)
-- title-level (not sentence-level) HotpotQA relevance
-- simple graph scoring — expansion does not yet reliably beat the baseline
-- no constraint layer, agent-trace layer, or answer synthesis / citation validation yet
+**Current limitations** — heuristic extraction (no provenance/confidence yet) · title-level (not sentence-level) HotpotQA relevance · no constraint layer, agent-trace layer, or answer synthesis / citation validation yet.
 
 **Near-term**
 - 🔜 generalize into a reusable **GKN core** + thin **use-case adapters**
-- 🔜 sentence-level relevance + more query-aware graph scoring
+- 🔜 the **governance structural eval** (typed-relation questions embeddings can't answer + evidence paths)
+- 🔜 sentence-level relevance + a true agentic retrieve → expand → re-retrieve loop
 - 🔜 LLM-assisted extraction with `source_chunk_id` + confidence + prompt-version provenance
-- 🔜 cleaner evaluation reports and artifact export
 
-**Longer-term** *(only if the lightweight graph proves its value first)*
-- Neo4j migration (Cypher, visualization, scale)
-- graph / non-Euclidean (hyperbolic) embeddings for hierarchy
-- temporal and causal graph layers
-- graph neural networks · interactive review UI · CI/CD evaluation
+**Longer-term** *(only if the lightweight graph proves its value first)* — Neo4j migration · graph / hyperbolic embeddings · temporal & causal layers · GNNs · interactive review UI · CI/CD evaluation.
 
 ---
 
-## 🧠 Conceptual Grounding
+## 📚 References and grounding
 
-- **GraphRAG** — graphs improve retrieval/summarization over private corpora when questions need more than local similarity
-- **Knowledge graph embeddings** — relations as geometric operations, not just text labels
-- **Geometric deep learning** — structured / non-Euclidean representations matter when data has relational topology
-- **Geometry discovery** (Agus Sudjianto) — learning systems succeed by discovering structure, similarity, direction, and path, not only by raw matching
-
----
-
-## 📚 References
+**Grounded in:** *GraphRAG* (graphs improve retrieval over private corpora when questions need more than local similarity) · *knowledge graph embeddings* (relations as geometric operations) · *geometric deep learning* (structure/non-Euclidean geometry matters for relational data) · *geometry discovery* — Agus Sudjianto (learning succeeds by discovering structure, similarity, direction, and path).
 
 - Agus Sudjianto — *Learning as Geometry Discovery* (2026) · [link](https://agussudjianto.substack.com/p/learning-as-geometry-discovery)
 - Agus Sudjianto — *What Learning Is Geometry Discovery Actually Means* (2026) · [link](https://agussudjianto.substack.com/p/what-learning-is-geometry-discovery)
