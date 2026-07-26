@@ -178,7 +178,11 @@ class EmbeddingVectorStore:
             scores, indices = self.index.search(query_embedding, top_k)
             ranked = list(zip(scores[0], indices[0]))
         else:
-            similarities = self.embeddings @ query_embedding[0]
+            with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+                similarities = self.embeddings @ query_embedding[0]
+            # Defensive: keep any stray non-finite score (e.g. from a pre-existing
+            # cache built before embeddings were sanitized) out of the ranking.
+            similarities = np.nan_to_num(similarities, nan=-1.0, posinf=-1.0, neginf=-1.0)
             top_indices = np.argsort(similarities)[::-1][:top_k]
             ranked = [(float(similarities[idx]), int(idx)) for idx in top_indices]
 
@@ -227,6 +231,14 @@ class EmbeddingVectorStore:
         return np.array(vectors, dtype=np.float32)
 
     def _normalize_embeddings(self, embeddings: np.ndarray) -> np.ndarray:
+        embeddings = np.asarray(embeddings, dtype=np.float32)
+        # Embedding providers occasionally return non-finite values (NaN/inf) for a
+        # row. Left in place these propagate through the similarity matmul in
+        # search() — raising divide-by-zero / overflow / invalid-value
+        # RuntimeWarnings and producing NaN scores that silently corrupt ranking.
+        # Zero them out so the affected row simply contributes no similarity.
+        if not np.isfinite(embeddings).all():
+            embeddings = np.nan_to_num(embeddings, nan=0.0, posinf=0.0, neginf=0.0)
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         return embeddings / norms
