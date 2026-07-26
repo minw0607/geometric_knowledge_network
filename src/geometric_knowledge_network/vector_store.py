@@ -159,6 +159,11 @@ class EmbeddingVectorStore:
 
     def _build_index(self, normalized: np.ndarray) -> None:
         normalized = np.ascontiguousarray(normalized, dtype=np.float32)
+        # A cache written before embeddings were sanitized may still hold NaN/inf
+        # rows; scrub them here so neither the faiss index nor the numpy fallback
+        # inherits non-finite values.
+        if not np.isfinite(normalized).all():
+            normalized = np.nan_to_num(normalized, nan=0.0, posinf=0.0, neginf=0.0)
         self.embeddings = normalized
         self.embedding_dim = normalized.shape[1]
         if faiss is not None:
